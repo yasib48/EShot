@@ -32,6 +32,7 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
     , m_captureDelayTimer(nullptr)
     , m_overlayOpacity(100)
     , m_crosshairStyle("dash")
+    , m_resizeMode(ResNone)
 {
     setAttribute(Qt::WA_TranslucentBackground, false);
     setAttribute(Qt::WA_DeleteOnClose, false);
@@ -73,7 +74,9 @@ void CaptureOverlay::startCapture()
 {
     m_isSelecting = false;
     m_selectionComplete = false;
-    m_isMovingSelection = false;
+    m_isSelecting = false;
+    m_selectionComplete = false;
+    m_resizeMode = ResNone;
     m_selectionStart = QPoint();
     m_selectionEnd = QPoint();
 
@@ -206,12 +209,21 @@ void CaptureOverlay::paintEvent(QPaintEvent *event)
         painter.drawRect(selRect);
 
         // Köşe tutamakları
-        int hs = 4;
-        QColor hc(0, 122, 204);
-        painter.fillRect(selRect.left()-hs, selRect.top()-hs, hs*2, hs*2, hc);
-        painter.fillRect(selRect.right()-hs, selRect.top()-hs, hs*2, hs*2, hc);
-        painter.fillRect(selRect.left()-hs, selRect.bottom()-hs, hs*2, hs*2, hc);
-        painter.fillRect(selRect.right()-hs, selRect.bottom()-hs, hs*2, hs*2, hc);
+        int hs = 5; // Handle size radius
+        QColor hc(255, 255, 255);
+        QColor hbc(0, 122, 204);
+        
+        auto drawHandle = [&](const QPoint &p) {
+            QRect hr(p.x()-hs, p.y()-hs, hs*2, hs*2);
+            painter.fillRect(hr, hc);
+            painter.setPen(hbc);
+            painter.drawRect(hr);
+        };
+
+        drawHandle(selRect.topLeft());
+        drawHandle(selRect.topRight());
+        drawHandle(selRect.bottomLeft());
+        drawHandle(selRect.bottomRight());
 
         // Boyut bilgisi
         if (m_isSelecting || m_selectionComplete) {
@@ -258,26 +270,36 @@ void CaptureOverlay::mousePressEvent(QMouseEvent *event)
         if (m_selectionComplete) {
             QRect selRect = normalizedSelectionRect();
 
-            // Ctrl + sol tık = taşıma, VEYA hiçbir araç seçili değilse taşıma
-            bool wantMove = (event->modifiers() & Qt::ControlModifier) ||
-                            (m_annotationEngine && m_annotationEngine->currentTool() == AnnotationEngine::None);
-
-            if (selRect.contains(event->pos()) && wantMove) {
-                m_isMovingSelection = true;
-                m_moveOffset = event->pos() - selRect.topLeft();
-                setCursor(Qt::SizeAllCursor);
-                return;
+            ResizeMode mode = getResizeMode(event->pos());
+            
+            bool isDrawingTool = (m_annotationEngine && m_annotationEngine->currentTool() != AnnotationEngine::None);
+            
+            if (isDrawingTool && (mode == ResMove || mode == ResNewSelection)) {
+                if (selRect.contains(event->pos())) {
+                     m_annotationEngine->beginDraw(event->pos() - selRect.topLeft());
+                     update();
+                     return;
+                }
             }
 
-            if (selRect.contains(event->pos())) {
-                if (m_annotationEngine) {
-                    m_annotationEngine->beginDraw(event->pos() - selRect.topLeft());
-                    update();
+            if (mode != ResNone && mode != ResNewSelection) {
+                m_resizeMode = mode;
+                if (mode == ResMove) {
+                    m_moveOffset = event->pos() - selRect.topLeft();
+                } else {
+                    m_selectionStart = selRect.topLeft();
+                    m_selectionEnd = selRect.bottomRight();
                 }
+                update();
+                return;
+            }
+            
+            if (selRect.contains(event->pos())) {
+                // ...
             } else {
-                // Yeni seçim
                 m_selectionComplete = false;
                 m_isSelecting = true;
+                m_resizeMode = ResNewSelection;
                 m_selectionStart = event->pos();
                 m_selectionEnd = event->pos();
                 hideToolbar();
@@ -307,16 +329,38 @@ void CaptureOverlay::mousePressEvent(QMouseEvent *event)
 
 void CaptureOverlay::mouseMoveEvent(QMouseEvent *event)
 {
-    if (m_isMovingSelection) {
+    if (m_resizeMode != ResNone && m_resizeMode != ResNewSelection) {
         QRect oldSel = normalizedSelectionRect();
-        QPoint newTopLeft = event->pos() - m_moveOffset;
+        
+        if (m_resizeMode == ResMove) {
+            QPoint newTopLeft = event->pos() - m_moveOffset;
+            
+            int w = oldSel.width();
+            int h = oldSel.height(); // Assuming h is also defined, as it's used below.
+            // Ekran sınırları
+            newTopLeft.setX(qBound(0, newTopLeft.x(), width() - w));
+            newTopLeft.setY(qBound(0, newTopLeft.y(), height() - h));
 
-        // Ekran sınırları kontrolü
-        newTopLeft.setX(qBound(0, newTopLeft.x(), width() - oldSel.width()));
-        newTopLeft.setY(qBound(0, newTopLeft.y(), height() - oldSel.height()));
+            m_selectionStart = newTopLeft;
+            // QRect(p1, p2) yapıcı width = p2.x - p1.x + 1 mantığıyla çalışır.
+            // Bu yüzden aynı boyutu korumak için 1 çıkarmalıyız.
+            m_selectionEnd = newTopLeft + QPoint(w - 1, h - 1);
+        } 
+        else if (m_resizeMode == ResTopLeft) {
+            m_selectionStart = event->pos();
+        } 
+        else if (m_resizeMode == ResTopRight) {
+            m_selectionStart.setY(event->pos().y());
+            m_selectionEnd.setX(event->pos().x());
+        } 
+        else if (m_resizeMode == ResBottomLeft) {
+            m_selectionStart.setX(event->pos().x());
+            m_selectionEnd.setY(event->pos().y());
+        }
+        else if (m_resizeMode == ResBottomRight) {
+            m_selectionEnd = event->pos();
+        }
 
-        m_selectionStart = newTopLeft;
-        m_selectionEnd = newTopLeft + QPoint(oldSel.width(), oldSel.height());
         showToolbar();
         update();
         return;
@@ -334,15 +378,17 @@ void CaptureOverlay::mouseMoveEvent(QMouseEvent *event)
         }
     } else if (!m_selectionComplete) {
         update(); // crosshair
+    } else {
+        updateCursor(event->pos());
     }
 }
 
 void CaptureOverlay::mouseReleaseEvent(QMouseEvent *event)
 {
     if (event->button() == Qt::LeftButton) {
-        if (m_isMovingSelection) {
-            m_isMovingSelection = false;
-            setCursor(Qt::CrossCursor);
+        if (m_resizeMode != ResNone && m_resizeMode != ResNewSelection) {
+            m_resizeMode = ResNone;
+            updateCursor(event->pos());
             return;
         }
 
@@ -576,4 +622,48 @@ void CaptureOverlay::onPinToDesktop()
     m_isSelecting = false;
 
     qDebug() << "[CaptureOverlay] Pinned to desktop at" << screenPos;
+}
+
+CaptureOverlay::ResizeMode CaptureOverlay::getResizeMode(const QPoint &pos)
+{
+    QRect sel = normalizedSelectionRect();
+    int h = 10; // Hit radius
+
+    if (QRect(sel.topLeft() + QPoint(-h,-h), QSize(h*2,h*2)).contains(pos)) return ResTopLeft;
+    if (QRect(sel.topRight() + QPoint(-h,-h), QSize(h*2,h*2)).contains(pos)) return ResTopRight;
+    if (QRect(sel.bottomLeft() + QPoint(-h,-h), QSize(h*2,h*2)).contains(pos)) return ResBottomLeft;
+    if (QRect(sel.bottomRight() + QPoint(-h,-h), QSize(h*2,h*2)).contains(pos)) return ResBottomRight;
+
+    if (sel.contains(pos)) return ResMove;
+    
+    return ResNewSelection;
+}
+
+void CaptureOverlay::updateCursor(const QPoint &pos)
+{
+    if (!m_selectionComplete) {
+        setCursor(Qt::CrossCursor);
+        return;
+    }
+
+    ResizeMode mode = getResizeMode(pos);
+    switch (mode) {
+        case ResTopLeft:
+        case ResBottomRight:
+            setCursor(Qt::SizeFDiagCursor);
+            break;
+        case ResTopRight:
+        case ResBottomLeft:
+            setCursor(Qt::SizeBDiagCursor);
+            break;
+        case ResMove:
+            if (m_annotationEngine && m_annotationEngine->currentTool() == AnnotationEngine::None)
+                setCursor(Qt::SizeAllCursor);
+            else
+                setCursor(Qt::CrossCursor); // Çizim için
+            break;
+        default:
+            setCursor(Qt::ArrowCursor);
+            break;
+    }
 }

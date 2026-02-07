@@ -59,6 +59,12 @@ private:
     AnnotationToolbar *m_toolbar;
     AnnotationEngine *m_annotationEngine;
 
+    // Boyutlandırma ve Taşıma
+    enum ResizeMode { ResNone, ResTopLeft, ResTopRight, ResBottomRight, ResBottomLeft, ResMove, ResNewSelection };
+    ResizeMode m_resizeMode;
+    ResizeMode getResizeMode(const QPoint &pos);
+    void updateCursor(const QPoint &pos);
+
     QTimer *m_captureDelayTimer;
 
     // Opaklık ayarı

@@ -1,76 +1,74 @@
-# EShot 📸
+# EShot
 
-**EShot**, Windows için geliştirilmiş, **Lightshot** ve **Flameshot** benzeri, modern, hızlı ve hafif bir ekran görüntüsü alma aracıdır. C++, Qt 6 ve Windows Native API kullanılarak geliştirilmiştir.
+EShot is a modern, fast, and lightweight screenshot tool for Windows, inspired by Lightshot and Flameshot. It is developed using C++, Qt 6, and Windows Native API.
 
-![EShot Banner](/resources/icons/pen.svg) 
-*(Buraya daha sonra uygulamanın ekran görüntüsünü ekleyebilirsiniz)*
+## Features
 
-## ✨ Özellikler
+*   **Fast and Lightweight:** Minimal system resource usage.
+*   **Advanced Annotation Tools:** Pen, Arrow, Rectangle, **Circle**, Text, Highlighter, Blur, and **Counter (#)**.
+*   **Modern Interface:** Sleek design, animations, and **Dark Mode** support.
+*   **Pin to Desktop:** Pin the selected area to the screen (Always-on-top window).
+*   **Easy Selection:** Move the selection area using `Ctrl` + Drag.
+*   **Automatic Saving:** Customizable filename templates (`%Y-%m-%d`, etc.) and save path.
+*   **Clipboard Integration:** Options to automatically copy to clipboard after capture.
+*   **Multi-Monitor DPI Support:** Pixel-perfect capture using Windows Native API (`BitBlt`).
 
-*   **⚡ Hızlı ve Hafif:** Minimum sistem kaynağı kullanımı.
-*   **🖊️ Gelişmiş Çizim Araçları:** Kalem, Ok, Dikdörtgen, **Çember**, Vurgulayıcı, Bulanıklaştırma (Blur) ve **Sayaç (#)**.
-*   **🎨 Modern Arayüz:** Şık tasarım, animasyonlar ve **Koyu Tema** desteği.
-*   **📌 Pin to Desktop:** Seçilen alanı ekrana sabitleme (Always-on-top pencere).
-*   **🖱️ Kolay Seçim:** `Ctrl` + Sürükle ile seçim alanını taşıma.
-*   **💾 Otomatik Kayıt:** Özelleştirilebilir dosya adı şablonları (`%Y-%m-%d` vb.) ve kayıt yolu.
-*   **📋 Pano Entegrasyonu:** Kayıttan sonra otomatik kopyalama, dosya yolunu kopyalama seçenekleri.
-*   **🖥️ Multi-Monitor DPI Desteği:** Windows Native API (`BitBlt`) ile piksel-piksel hatasız yakalama.
+## Installation and Build
 
-## 🛠️ Kurulum ve Derleme (Build)
+To develop or build this project, you need the following tools:
 
-Bu projeyi geliştirmek veya derlemek için aşağıdaki araçlara ihtiyacınız vardır:
+### Requirements
+*   **CMake** (3.16 or later)
+*   **Qt 6.x** (Core, Gui, Widgets modules)
+*   **Visual Studio Build Tools 2022** (or compatible MSVC compiler)
 
-### Gereksinimler
-*   **CMake** (3.16 veya üzeri)
-*   **Qt 6.x** (Core, Gui, Widgets modülleri)
-*   **Visual Studio Build Tools 2022** (veya uyumlu MSVC derleyicisi)
+### Build Steps
 
-### Derleme Adımları
-
-1.  Repoyu klonlayın:
+1.  Clone the repository:
     ```bash
-    git clone https://github.com/kullaniciadi/EShot.git
+    git clone https://github.com/Benoks/EShot.git
     cd EShot
     ```
 
-2.  Build klasörü oluşturun ve CMake'i çalıştırın:
+2.  Create a build directory and run CMake:
     ```bash
     mkdir build
     cd build
     cmake ..
     ```
 
-3.  Projeyi derleyin (Release modunda):
+3.  Build the project (in Release mode):
     ```bash
     cmake --build . --config Release
     ```
 
-4.  Çalıştırılabilir dosya `build/bin/Release/EShot.exe` konumunda olacaktır.
+4.  The executable will be located at `build/bin/Release/EShot.exe`.
 
-## 🚀 Kullanım
+## Usage
 
-*   **PrtSc (Print Screen):** Ekran görüntüsü alma modunu başlatır.
-*   **Sol Tık + Sürükle:** Alan seçer.
-*   **Araç Çubuğu:** Seçimden sonra araçlar belirir (Kalem, Ok, vb.).
-*   **Ayarlar:** Tepsi simgesine (System Tray) sağ tıklayarak ulaşılabilir.
-*   **Pinleme:** Araç çubuğundaki "İğne" ikonuna tıklayarak seçimi ekrana sabitleyin.
+*   **PrtSc (Print Screen):** Starts screenshot mode.
+*   **Left Click + Drag:** Selects an area.
+*   **Toolbar:** Appears after selection (Pen, Arrow, etc.).
+*   **Settings:** Accessible by right-clicking the System Tray icon.
+*   **Pinning:** Click the "Pin" icon in the toolbar to pin the selection to the screen.
+*   **Resizing:** Drag the white handles at the corners of the selection to resize the capture area.
 
-### Kısayollar
-| Tuş | İşlev |
+### Shortcuts
+| Key | Function |
 | :--- | :--- |
-| `PrtSc` | Yakalamayı Başlat |
-| `Enter` / `Ctrl+C` | Seçimi Kopyala |
-| `Ctrl+S` | Kaydet |
-| `Esc` | İptal Et / Kapat |
-| `Ctrl+Z` | Geri Al (Undo) |
-| `Ctrl+Y` | İleri Al (Redo) |
-| `Shift` (Çizerken) | Tam Kare / Tam Daire Çiz |
-| `Ctrl` + Sürükle | Seçim Alanını Taşı |
+| `PrtSc` | Start Capture |
+| `Enter` / `Ctrl+C` | Copy Selection |
+| `Ctrl+S` | Save |
+| `Esc` | Cancel / Close |
+| `Ctrl+Z` | Undo |
+| `Ctrl+Y` | Redo |
+| `Shift` (While Drawing) | Perfect Square / Circle |
+| `Ctrl` + Drag / Drag Selection | Move Selection Area |
 
-## 🤝 Katkıda Bulunma
+## Contributing
 
-Pull request'ler kabul edilir. Büyük değişiklikler için önce lütfen tartışmak üzere bir konu (issue) açınız.
+Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
 
-## 📜 Lisans
+## License
 
-Bu proje [MIT](LICENSE) lisansı altında lisanslanmıştır.
+This project is licensed under the [MIT](LICENSE) license.

@@ -40,6 +40,22 @@ bool AnnotationToolbar::isToolVisible(const QString &key) const
     return m_visibleTools.contains(key);
 }
 
+void AnnotationToolbar::refreshTools()
+{
+    QSettings s("EShot", "EShot");
+    m_visibleTools = s.value("visibleTools",
+        QStringList{"Pen","Arrow","Rectangle","Circle","Text","Highlighter","Blur","Counter"})
+        .toStringList();
+
+    for (auto btn : m_toolButtons) {
+        QString key = btn->property("settingsKey").toString();
+        if (!key.isEmpty()) {
+            btn->setVisible(isToolVisible(key));
+        }
+    }
+    adjustSize();
+}
+
 QWidget* AnnotationToolbar::createSeparator()
 {
     QFrame *sep = new QFrame(this);
@@ -57,22 +73,17 @@ void AnnotationToolbar::setupUI()
     m_layout->setSpacing(4);
 
     // Araçlar — sadece görünür olanlar
-    if (isToolVisible("Pen"))
-        m_layout->addWidget(createToolButton(":/icons/pen.svg", "Kalem (P)", AnnotationEngine::Pen, "Pen"));
-    if (isToolVisible("Arrow"))
-        m_layout->addWidget(createToolButton(":/icons/arrow.svg", "Ok (A)", AnnotationEngine::Arrow, "Arrow"));
-    if (isToolVisible("Rectangle"))
-        m_layout->addWidget(createToolButton(":/icons/rectangle.svg", "Dikdörtgen (R)", AnnotationEngine::Rectangle, "Rectangle"));
-    if (isToolVisible("Circle"))
-        m_layout->addWidget(createToolButton(":/icons/rectangle.svg", "Çember (C) [Shift=Tam Daire]", AnnotationEngine::Circle, "Circle"));
-    if (isToolVisible("Text"))
-        m_layout->addWidget(createToolButton(":/icons/text.svg", "Metin (T)", AnnotationEngine::Text, "Text"));
-    if (isToolVisible("Highlighter"))
-        m_layout->addWidget(createToolButton(":/icons/highlighter.svg", "Vurgulayıcı (H)", AnnotationEngine::Highlighter, "Highlighter"));
-    if (isToolVisible("Blur"))
-        m_layout->addWidget(createToolButton(":/icons/blur.svg", "Bulanıklaştır (B)", AnnotationEngine::Blur, "Blur"));
-    if (isToolVisible("Counter"))
-        m_layout->addWidget(createToolButton(":/icons/pen.svg", "Numara (#)", AnnotationEngine::Counter, "Counter"));
+    // Araçlar — hepsini oluştur, görünürlüğü refreshTools yönetecek
+    m_layout->addWidget(createToolButton(":/icons/pen.svg", "Kalem (P)", AnnotationEngine::Pen, "Pen"));
+    m_layout->addWidget(createToolButton(":/icons/arrow.svg", "Ok (A)", AnnotationEngine::Arrow, "Arrow"));
+    m_layout->addWidget(createToolButton(":/icons/rectangle.svg", "Dikdörtgen (R)", AnnotationEngine::Rectangle, "Rectangle"));
+    m_layout->addWidget(createToolButton(":/icons/rectangle.svg", "Çember (C) [Shift=Tam Daire]", AnnotationEngine::Circle, "Circle"));
+    m_layout->addWidget(createToolButton(":/icons/text.svg", "Metin (T)", AnnotationEngine::Text, "Text"));
+    m_layout->addWidget(createToolButton(":/icons/highlighter.svg", "Vurgulayıcı (H)", AnnotationEngine::Highlighter, "Highlighter"));
+    m_layout->addWidget(createToolButton(":/icons/blur.svg", "Bulanıklaştır (B)", AnnotationEngine::Blur, "Blur"));
+    m_layout->addWidget(createToolButton(":/icons/pen.svg", "Numara (#)", AnnotationEngine::Counter, "Counter"));
+
+    refreshTools(); // İlk görünürlük ayarını yap
 
     m_layout->addWidget(createSeparator());
 
@@ -145,8 +156,9 @@ void AnnotationToolbar::applyStyles()
 QPushButton* AnnotationToolbar::createToolButton(const QString &iconPath, const QString &tooltip,
                                                   int toolId, const QString &settingsKey)
 {
-    Q_UNUSED(settingsKey);
+
     QPushButton *btn = new QPushButton(this);
+    btn->setProperty("settingsKey", settingsKey);
     btn->setToolTip(tooltip);
     btn->setProperty("toolId", toolId);
     btn->setCursor(Qt::PointingHandCursor);

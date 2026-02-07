@@ -82,6 +82,8 @@ void CaptureOverlay::startCapture()
 
     // Ayarları yükle
     QSettings s("EShot", "EShot");
+    if (m_toolbar) m_toolbar->refreshTools();
+
     m_overlayOpacity = s.value("overlayOpacity", 100).toInt();
     m_crosshairStyle = s.value("crosshairStyle", "dash").toString();
 

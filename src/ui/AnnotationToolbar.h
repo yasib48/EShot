@@ -15,6 +15,8 @@ public:
     explicit AnnotationToolbar(QWidget *parent = nullptr);
     ~AnnotationToolbar();
 
+    void refreshTools();
+
 signals:
     void toolSelected(int toolId);
     void copyRequested();

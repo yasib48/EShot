@@ -52,3 +52,4 @@ Desktop.ini
 
 # EShot specific
 *.log
+installer_output/

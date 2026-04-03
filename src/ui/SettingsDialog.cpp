@@ -1,4 +1,5 @@
 #include "SettingsDialog.h"
+#include "../core/HotkeyManager.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -12,16 +13,21 @@
 #include <QDir>
 #include <QDateTime>
 #include <QListWidgetItem>
+#include <QKeySequenceEdit>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
 #endif
 
+// ---------------------------------------------------------------------------
+// Yapıcı / Yıkıcı
+// ---------------------------------------------------------------------------
+
 SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent)
 {
     setWindowTitle("EShot Ayarları");
     setMinimumSize(560, 540);
-    setMaximumSize(750, 650);
+    setMaximumSize(750, 680);
 
     m_settings = new QSettings("EShot", "EShot", this);
     setupUI();
@@ -29,6 +35,10 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent)
 }
 
 SettingsDialog::~SettingsDialog() {}
+
+// ---------------------------------------------------------------------------
+// Yardımcı
+// ---------------------------------------------------------------------------
 
 QString SettingsDialog::resolvePatternPreview(const QString &pattern) const
 {
@@ -45,6 +55,103 @@ QString SettingsDialog::resolvePatternPreview(const QString &pattern) const
     return r;
 }
 
+// Qt Key → Win32 VK + Modifier dönüşümü
+bool SettingsDialog::keySequenceToWin32(const QKeySequence &seq, UINT &modifiers, UINT &vkey)
+{
+#ifdef Q_OS_WIN
+    if (seq.isEmpty()) return false;
+
+    // Qt'nin ilk kısayolu al
+    QKeyCombination combo = seq[0];
+    Qt::KeyboardModifiers qtMod = combo.keyboardModifiers();
+    Qt::Key qtKey = combo.key();
+
+    modifiers = 0;
+    if (qtMod & Qt::ShiftModifier)   modifiers |= MOD_SHIFT;
+    if (qtMod & Qt::ControlModifier) modifiers |= MOD_CONTROL;
+    if (qtMod & Qt::AltModifier)     modifiers |= MOD_ALT;
+    if (qtMod & Qt::MetaModifier)    modifiers |= MOD_WIN;
+
+    // Özel tuşlar
+    struct { Qt::Key qt; UINT win; } mapping[] = {
+        { Qt::Key_Print,      VK_SNAPSHOT },
+        { Qt::Key_F1,         VK_F1 }, { Qt::Key_F2,  VK_F2  }, { Qt::Key_F3,  VK_F3  },
+        { Qt::Key_F4,         VK_F4 }, { Qt::Key_F5,  VK_F5  }, { Qt::Key_F6,  VK_F6  },
+        { Qt::Key_F7,         VK_F7 }, { Qt::Key_F8,  VK_F8  }, { Qt::Key_F9,  VK_F9  },
+        { Qt::Key_F10,        VK_F10}, { Qt::Key_F11, VK_F11 }, { Qt::Key_F12, VK_F12 },
+        { Qt::Key_Home,       VK_HOME },  { Qt::Key_End,    VK_END    },
+        { Qt::Key_PageUp,     VK_PRIOR }, { Qt::Key_PageDown,VK_NEXT  },
+        { Qt::Key_Insert,     VK_INSERT },{ Qt::Key_Delete,  VK_DELETE },
+        { Qt::Key_Left,       VK_LEFT },  { Qt::Key_Right,   VK_RIGHT },
+        { Qt::Key_Up,         VK_UP   },  { Qt::Key_Down,    VK_DOWN  },
+        { Qt::Key_Space,      VK_SPACE }, { Qt::Key_Return,  VK_RETURN},
+        { Qt::Key_Escape,     VK_ESCAPE },{ Qt::Key_Tab,     VK_TAB   },
+        { Qt::Key_Backspace,  VK_BACK  },
+    };
+    for (auto &m : mapping) {
+        if (qtKey == m.qt) { vkey = m.win; return true; }
+    }
+
+    // ASCII / alfanumerik
+    if (qtKey >= Qt::Key_A && qtKey <= Qt::Key_Z) {
+        vkey = 'A' + (qtKey - Qt::Key_A);
+        return true;
+    }
+    if (qtKey >= Qt::Key_0 && qtKey <= Qt::Key_9) {
+        vkey = '0' + (qtKey - Qt::Key_0);
+        return true;
+    }
+    return false;
+#else
+    Q_UNUSED(seq); Q_UNUSED(modifiers); Q_UNUSED(vkey);
+    return false;
+#endif
+}
+
+// Win32 modifier + VK → Qt KeySequence (görüntüleme için)
+static QKeySequence win32ToKeySequence(UINT modifiers, UINT vkey)
+{
+    Qt::KeyboardModifiers qtMod;
+#ifdef Q_OS_WIN
+    if (modifiers & MOD_SHIFT)   qtMod |= Qt::ShiftModifier;
+    if (modifiers & MOD_CONTROL) qtMod |= Qt::ControlModifier;
+    if (modifiers & MOD_ALT)     qtMod |= Qt::AltModifier;
+    if (modifiers & MOD_WIN)     qtMod |= Qt::MetaModifier;
+
+    struct { UINT win; Qt::Key qt; } mapping[] = {
+        { VK_SNAPSHOT, Qt::Key_Print },
+        { VK_F1,  Qt::Key_F1  }, { VK_F2,  Qt::Key_F2  }, { VK_F3,  Qt::Key_F3  },
+        { VK_F4,  Qt::Key_F4  }, { VK_F5,  Qt::Key_F5  }, { VK_F6,  Qt::Key_F6  },
+        { VK_F7,  Qt::Key_F7  }, { VK_F8,  Qt::Key_F8  }, { VK_F9,  Qt::Key_F9  },
+        { VK_F10, Qt::Key_F10 }, { VK_F11, Qt::Key_F11 }, { VK_F12, Qt::Key_F12 },
+        { VK_HOME,   Qt::Key_Home   }, { VK_END,    Qt::Key_End      },
+        { VK_PRIOR,  Qt::Key_PageUp }, { VK_NEXT,   Qt::Key_PageDown  },
+        { VK_INSERT, Qt::Key_Insert }, { VK_DELETE, Qt::Key_Delete    },
+        { VK_LEFT,   Qt::Key_Left   }, { VK_RIGHT,  Qt::Key_Right     },
+        { VK_UP,     Qt::Key_Up     }, { VK_DOWN,   Qt::Key_Down      },
+        { VK_SPACE,  Qt::Key_Space  }, { VK_RETURN, Qt::Key_Return    },
+        { VK_ESCAPE, Qt::Key_Escape }, { VK_TAB,    Qt::Key_Tab       },
+        { VK_BACK,   Qt::Key_Backspace },
+    };
+    for (auto &m : mapping) {
+        if (vkey == m.win) return QKeySequence(QKeyCombination(qtMod, m.qt));
+    }
+    if (vkey >= 'A' && vkey <= 'Z') {
+        return QKeySequence(QKeyCombination(qtMod, static_cast<Qt::Key>(Qt::Key_A + (vkey - 'A'))));
+    }
+    if (vkey >= '0' && vkey <= '9') {
+        return QKeySequence(QKeyCombination(qtMod, static_cast<Qt::Key>(Qt::Key_0 + (vkey - '0'))));
+    }
+#else
+    Q_UNUSED(modifiers); Q_UNUSED(vkey);
+#endif
+    return QKeySequence(Qt::Key_Print);
+}
+
+// ---------------------------------------------------------------------------
+// UI kurulumu
+// ---------------------------------------------------------------------------
+
 void SettingsDialog::setupUI()
 {
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
@@ -56,10 +163,11 @@ void SettingsDialog::setupUI()
     mainLayout->addWidget(titleLabel);
 
     QTabWidget *tabs = new QTabWidget(this);
-    tabs->addTab(createGeneralTab(), "Genel");
-    tabs->addTab(createCaptureTab(), "Yakalama");
-    tabs->addTab(createAppearanceTab(), "Görünüm");
-    tabs->addTab(createInterfaceTab(), "Arayüz");
+    tabs->addTab(createGeneralTab(),  "Genel");
+    tabs->addTab(createCaptureTab(),  "Yakalama");
+    tabs->addTab(createAppearanceTab(),"Görünüm");
+    tabs->addTab(createInterfaceTab(),"Arayüz");
+    tabs->addTab(createHotkeyTab(),   "Kısayol Tuşu");
     mainLayout->addWidget(tabs);
 
     // Butonlar
@@ -88,12 +196,15 @@ void SettingsDialog::setupUI()
     mainLayout->addLayout(btnLayout);
 }
 
+// ---------------------------------------------------------------------------
+// Tab: Genel
+// ---------------------------------------------------------------------------
+
 QWidget* SettingsDialog::createGeneralTab()
 {
     QWidget *tab = new QWidget();
     QVBoxLayout *layout = new QVBoxLayout(tab);
 
-    // Kayıt dizini
     QGroupBox *pathGroup = new QGroupBox("Kayıt Dizini");
     QHBoxLayout *pathLayout = new QHBoxLayout(pathGroup);
     m_savePathEdit = new QLineEdit();
@@ -104,19 +215,15 @@ QWidget* SettingsDialog::createGeneralTab()
     pathLayout->addWidget(browseBtn);
     layout->addWidget(pathGroup);
 
-    // Dosya adı şablonu
     QGroupBox *fnGroup = new QGroupBox("Dosya Adı Şablonu");
     QVBoxLayout *fnLayout = new QVBoxLayout(fnGroup);
-
     m_filenamePatternEdit = new QLineEdit();
     m_filenamePatternEdit->setPlaceholderText("Screenshot_%Y-%M-%D_%h-%m-%s");
     connect(m_filenamePatternEdit, &QLineEdit::textChanged, this, &SettingsDialog::onFilenamePatternChanged);
     fnLayout->addWidget(m_filenamePatternEdit);
-
     m_patternPreviewLabel = new QLabel();
     m_patternPreviewLabel->setStyleSheet("color: #888; font-style: italic;");
     fnLayout->addWidget(m_patternPreviewLabel);
-
     QLabel *helpLabel = new QLabel(
         "<b>Değişkenler:</b> %Y (yıl 4h), %y (yıl 2h), %M (ay), %D (gün), "
         "%h (saat), %m (dakika), %s (saniye), %T (pencere başlığı)"
@@ -124,39 +231,35 @@ QWidget* SettingsDialog::createGeneralTab()
     helpLabel->setWordWrap(true);
     helpLabel->setStyleSheet("color: #999; font-size: 11px;");
     fnLayout->addWidget(helpLabel);
-
     layout->addWidget(fnGroup);
 
-    // Genel seçenekler
     QGroupBox *genGroup = new QGroupBox("Genel Seçenekler");
     QVBoxLayout *genLayout = new QVBoxLayout(genGroup);
-
-    m_autoStartCheck = new QCheckBox("Windows ile birlikte başlat");
+    m_autoStartCheck        = new QCheckBox("Windows ile birlikte başlat");
+    m_showNotificationsCheck= new QCheckBox("Bildirim göster");
+    m_playSoundCheck        = new QCheckBox("Yakalama sesi çal");
+    m_copyPathAfterSaveCheck= new QCheckBox("Kaydettikten sonra dosya yolunu panoya kopyala");
     genLayout->addWidget(m_autoStartCheck);
-
-    m_showNotificationsCheck = new QCheckBox("Bildirim göster");
     genLayout->addWidget(m_showNotificationsCheck);
-
-    m_playSoundCheck = new QCheckBox("Yakalama sesi çal");
     genLayout->addWidget(m_playSoundCheck);
-
-    m_copyPathAfterSaveCheck = new QCheckBox("Kaydettikten sonra dosya yolunu panoya kopyala");
     genLayout->addWidget(m_copyPathAfterSaveCheck);
-
     layout->addWidget(genGroup);
+
     layout->addStretch();
     return tab;
 }
+
+// ---------------------------------------------------------------------------
+// Tab: Yakalama
+// ---------------------------------------------------------------------------
 
 QWidget* SettingsDialog::createCaptureTab()
 {
     QWidget *tab = new QWidget();
     QVBoxLayout *layout = new QVBoxLayout(tab);
 
-    // Format
     QGroupBox *fmtGroup = new QGroupBox("Dosya Formatı");
     QFormLayout *fmtLayout = new QFormLayout(fmtGroup);
-
     m_formatCombo = new QComboBox();
     m_formatCombo->addItem("PNG (Kayıpsız)", "PNG");
     m_formatCombo->addItem("JPEG (Küçük dosya)", "JPEG");
@@ -180,48 +283,43 @@ QWidget* SettingsDialog::createCaptureTab()
         m_qualitySlider->setEnabled(jpeg);
         m_qualitySpin->setEnabled(jpeg);
     });
-
     layout->addWidget(fmtGroup);
 
-    // Yakalama
     QGroupBox *capGroup = new QGroupBox("Yakalama Ayarları");
     QFormLayout *capLayout = new QFormLayout(capGroup);
-
     m_delaySpin = new QSpinBox();
     m_delaySpin->setRange(0, 10000);
     m_delaySpin->setSingleStep(500);
     m_delaySpin->setSuffix(" ms");
     m_delaySpin->setSpecialValueText("Gecikme yok");
     capLayout->addRow("Gecikme:", m_delaySpin);
-
     m_copyAfterCaptureCheck = new QCheckBox("Yakaladıktan sonra panoya kopyala");
     capLayout->addRow(m_copyAfterCaptureCheck);
-
     m_closeAfterCopyCheck = new QCheckBox("Kopyaladıktan sonra overlay'i kapat");
     capLayout->addRow(m_closeAfterCopyCheck);
-
     layout->addWidget(capGroup);
+
     layout->addStretch();
     return tab;
 }
+
+// ---------------------------------------------------------------------------
+// Tab: Görünüm
+// ---------------------------------------------------------------------------
 
 QWidget* SettingsDialog::createAppearanceTab()
 {
     QWidget *tab = new QWidget();
     QVBoxLayout *layout = new QVBoxLayout(tab);
 
-    // Tema
     QGroupBox *themeGroup = new QGroupBox("Tema");
     QVBoxLayout *themeLayout = new QVBoxLayout(themeGroup);
     m_darkModeCheck = new QCheckBox("Koyu tema kullan (yeniden başlatma gerekir)");
     themeLayout->addWidget(m_darkModeCheck);
     layout->addWidget(themeGroup);
 
-    // Overlay
     QGroupBox *overlayGroup = new QGroupBox("Overlay Ayarları");
     QFormLayout *overlayLayout = new QFormLayout(overlayGroup);
-
-    // Opaklık slider — 0-255 arası
     QHBoxLayout *opLayout = new QHBoxLayout();
     m_opacitySlider = new QSlider(Qt::Horizontal);
     m_opacitySlider->setRange(0, 255);
@@ -235,17 +333,20 @@ QWidget* SettingsDialog::createAppearanceTab()
     opLayout->addWidget(m_opacitySlider);
     opLayout->addWidget(m_opacityValueLabel);
     overlayLayout->addRow("Arka Plan Opaklığı:", opLayout);
-
     m_crosshairStyleCombo = new QComboBox();
     m_crosshairStyleCombo->addItem("Kesikli çizgi", "dash");
     m_crosshairStyleCombo->addItem("Düz çizgi", "solid");
     m_crosshairStyleCombo->addItem("Kapalı", "none");
     overlayLayout->addRow("Crosshair:", m_crosshairStyleCombo);
-
     layout->addWidget(overlayGroup);
+
     layout->addStretch();
     return tab;
 }
+
+// ---------------------------------------------------------------------------
+// Tab: Arayüz
+// ---------------------------------------------------------------------------
 
 QWidget* SettingsDialog::createInterfaceTab()
 {
@@ -262,7 +363,6 @@ QWidget* SettingsDialog::createInterfaceTab()
     m_toolVisibilityList = new QListWidget();
     m_toolVisibilityList->setAlternatingRowColors(true);
 
-    // Tüm araçlar
     struct ToolInfo { QString key; QString label; };
     QVector<ToolInfo> tools = {
         {"Pen",         "✏️ Kalem"},
@@ -279,17 +379,15 @@ QWidget* SettingsDialog::createInterfaceTab()
         QListWidgetItem *item = new QListWidgetItem(t.label);
         item->setData(Qt::UserRole, t.key);
         item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
-        item->setCheckState(Qt::Checked); // loadSettings'te güncellenir
+        item->setCheckState(Qt::Checked);
         m_toolVisibilityList->addItem(item);
     }
-
     toolsLayout->addWidget(m_toolVisibilityList);
 
-    // Select All / Deselect All
     QHBoxLayout *selBtnLayout = new QHBoxLayout();
-    QPushButton *selectAllBtn = new QPushButton("Tümünü Seç");
+    QPushButton *selectAllBtn   = new QPushButton("Tümünü Seç");
     QPushButton *deselectAllBtn = new QPushButton("Tümünü Kaldır");
-    connect(selectAllBtn, &QPushButton::clicked, this, &SettingsDialog::onSelectAllTools);
+    connect(selectAllBtn,   &QPushButton::clicked, this, &SettingsDialog::onSelectAllTools);
     connect(deselectAllBtn, &QPushButton::clicked, this, &SettingsDialog::onDeselectAllTools);
     selBtnLayout->addWidget(selectAllBtn);
     selBtnLayout->addWidget(deselectAllBtn);
@@ -301,7 +399,73 @@ QWidget* SettingsDialog::createInterfaceTab()
     return tab;
 }
 
+// ---------------------------------------------------------------------------
+// Tab: Kısayol Tuşu  *** YENİ ***
+// ---------------------------------------------------------------------------
 
+QWidget* SettingsDialog::createHotkeyTab()
+{
+    QWidget *tab = new QWidget();
+    QVBoxLayout *layout = new QVBoxLayout(tab);
+    layout->setSpacing(12);
+
+    QGroupBox *group = new QGroupBox("Yakalama Kısayol Tuşu");
+    QVBoxLayout *gl = new QVBoxLayout(group);
+
+    QLabel *desc = new QLabel(
+        "Ekran görüntüsü almak için kullanılacak kısayol tuşunu aşağıya tıklayıp "
+        "yeni kısayolu basarak ayarlayın.\n\n"
+        "Varsayılan: <b>Print Screen</b>"
+    );
+    desc->setWordWrap(true);
+    desc->setStyleSheet("color: #ccc; font-size: 12px;");
+    gl->addWidget(desc);
+
+    m_hotkeyEdit = new QKeySequenceEdit();
+    m_hotkeyEdit->setMinimumHeight(40);
+    m_hotkeyEdit->setStyleSheet(R"(
+        QKeySequenceEdit {
+            font-size: 14px;
+            font-weight: bold;
+            padding: 6px 12px;
+            border: 2px solid #0078D4;
+            border-radius: 6px;
+            background: #2a2a2a;
+            color: #ffffff;
+        }
+        QKeySequenceEdit:focus { border-color: #1a8cff; }
+    )");
+    connect(m_hotkeyEdit, &QKeySequenceEdit::keySequenceChanged,
+            this, &SettingsDialog::onHotkeyChanged);
+    gl->addWidget(m_hotkeyEdit);
+
+    m_hotkeyStatusLabel = new QLabel("✅ Kısayol geçerli.");
+    m_hotkeyStatusLabel->setStyleSheet("color: #4caf50; font-size: 12px;");
+    gl->addWidget(m_hotkeyStatusLabel);
+
+    QPushButton *resetHkBtn = new QPushButton("🔄 Varsayılana Döndür (Print Screen)");
+    resetHkBtn->setStyleSheet("color: #aaa;");
+    connect(resetHkBtn, &QPushButton::clicked, [this]() {
+        m_hotkeyEdit->setKeySequence(QKeySequence(Qt::Key_Print));
+    });
+    gl->addWidget(resetHkBtn);
+
+    QLabel *noteLabel = new QLabel(
+        "⚠️ Not: Bazı sistem kısayolları (Win+L, Ctrl+Alt+Del vb.) engellenemez. "
+        "Modifier tuşları (Ctrl, Alt, Shift) ile kombinasyon tavsiye edilir."
+    );
+    noteLabel->setWordWrap(true);
+    noteLabel->setStyleSheet("color: #888; font-size: 11px;");
+    gl->addWidget(noteLabel);
+
+    layout->addWidget(group);
+    layout->addStretch();
+    return tab;
+}
+
+// ---------------------------------------------------------------------------
+// loadSettings
+// ---------------------------------------------------------------------------
 
 void SettingsDialog::loadSettings()
 {
@@ -332,10 +496,8 @@ void SettingsDialog::loadSettings()
     m_qualitySpin->setEnabled(jpeg);
 
     m_darkModeCheck->setChecked(m_settings->value("darkMode", true).toBool());
-
     int opacity = m_settings->value("overlayOpacity", 100).toInt();
     m_opacitySlider->setValue(opacity);
-
     QString cross = m_settings->value("crosshairStyle", "dash").toString();
     int ci = m_crosshairStyleCombo->findData(cross);
     if (ci >= 0) m_crosshairStyleCombo->setCurrentIndex(ci);
@@ -344,13 +506,40 @@ void SettingsDialog::loadSettings()
     QStringList visibleTools = m_settings->value("visibleTools",
         QStringList{"Pen","Arrow","Rectangle","Circle","Text","Highlighter","Blur","Counter"})
         .toStringList();
-
     for (int i = 0; i < m_toolVisibilityList->count(); ++i) {
         QListWidgetItem *item = m_toolVisibilityList->item(i);
         QString key = item->data(Qt::UserRole).toString();
         item->setCheckState(visibleTools.contains(key) ? Qt::Checked : Qt::Unchecked);
     }
+
+    // Kısayol tuşu
+    UINT savedMod  = static_cast<UINT>(m_settings->value("hotkeyModifiers", 0).toUInt());
+    UINT savedVKey = static_cast<UINT>(m_settings->value("hotkeyVKey", VK_SNAPSHOT).toUInt());
+    m_hotkeyEdit->setKeySequence(win32ToKeySequence(savedMod, savedVKey));
+    m_hotkeyStatusLabel->setText("✅ Kısayol geçerli.");
+    m_hotkeyStatusLabel->setStyleSheet("color: #4caf50; font-size: 12px;");
 }
+
+// ---------------------------------------------------------------------------
+// Slot: kısayol değiştiğinde anlık doğrulama
+// ---------------------------------------------------------------------------
+
+void SettingsDialog::onHotkeyChanged(const QKeySequence &seq)
+{
+    UINT mod = 0, vk = 0;
+    bool ok = keySequenceToWin32(seq, mod, vk);
+    if (!ok || seq.isEmpty()) {
+        m_hotkeyStatusLabel->setText("⚠️ Geçersiz kısayol. Lütfen tekrar deneyin.");
+        m_hotkeyStatusLabel->setStyleSheet("color: #ff9800; font-size: 12px;");
+    } else {
+        m_hotkeyStatusLabel->setText(QString("✅ Kısayol: %1").arg(seq.toString(QKeySequence::NativeText)));
+        m_hotkeyStatusLabel->setStyleSheet("color: #4caf50; font-size: 12px;");
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Slot: Dosya adı şablonu önizleme
+// ---------------------------------------------------------------------------
 
 void SettingsDialog::onFilenamePatternChanged(const QString &text)
 {
@@ -358,11 +547,19 @@ void SettingsDialog::onFilenamePatternChanged(const QString &text)
     m_patternPreviewLabel->setText("Önizleme: " + preview + ".png");
 }
 
+// ---------------------------------------------------------------------------
+// Slot: Gözat
+// ---------------------------------------------------------------------------
+
 void SettingsDialog::onBrowse()
 {
     QString dir = QFileDialog::getExistingDirectory(this, "Klasör Seç", m_savePathEdit->text());
     if (!dir.isEmpty()) m_savePathEdit->setText(dir);
 }
+
+// ---------------------------------------------------------------------------
+// Slot: Araç seçimi
+// ---------------------------------------------------------------------------
 
 void SettingsDialog::onSelectAllTools()
 {
@@ -376,6 +573,10 @@ void SettingsDialog::onDeselectAllTools()
         m_toolVisibilityList->item(i)->setCheckState(Qt::Unchecked);
 }
 
+// ---------------------------------------------------------------------------
+// onSave
+// ---------------------------------------------------------------------------
+
 void SettingsDialog::onSave()
 {
     QString savePath = m_savePathEdit->text();
@@ -387,22 +588,38 @@ void SettingsDialog::onSave()
         }
     }
 
-    m_settings->setValue("savePath", savePath);
-    m_settings->setValue("filenamePattern", m_filenamePatternEdit->text());
-    m_settings->setValue("autoStart", m_autoStartCheck->isChecked());
-    m_settings->setValue("showNotifications", m_showNotificationsCheck->isChecked());
-    m_settings->setValue("playSound", m_playSoundCheck->isChecked());
-    m_settings->setValue("copyPathAfterSave", m_copyPathAfterSaveCheck->isChecked());
+    // Kısayol doğrulama
+    QKeySequence seq = m_hotkeyEdit->keySequence();
+    UINT newMod = 0, newVKey = 0;
+    if (!seq.isEmpty()) {
+        if (!keySequenceToWin32(seq, newMod, newVKey)) {
+            QMessageBox::warning(this, "Geçersiz Kısayol",
+                "Seçilen kısayol tuşu geçerli değil.\n"
+                "Lütfen geçerli bir kısayol seçin veya varsayılan olarak bırakın.");
+            return;
+        }
+    } else {
+        // Boş bırakıldıysa PrtSc varsayılan
+        newMod  = 0;
+        newVKey = VK_SNAPSHOT;
+    }
 
-    m_settings->setValue("imageFormat", m_formatCombo->currentData().toString());
-    m_settings->setValue("imageQuality", m_qualitySpin->value());
-    m_settings->setValue("captureDelay", m_delaySpin->value());
-    m_settings->setValue("copyAfterCapture", m_copyAfterCaptureCheck->isChecked());
-    m_settings->setValue("closeAfterCopy", m_closeAfterCopyCheck->isChecked());
+    m_settings->setValue("savePath",          savePath);
+    m_settings->setValue("filenamePattern",    m_filenamePatternEdit->text());
+    m_settings->setValue("autoStart",          m_autoStartCheck->isChecked());
+    m_settings->setValue("showNotifications",  m_showNotificationsCheck->isChecked());
+    m_settings->setValue("playSound",          m_playSoundCheck->isChecked());
+    m_settings->setValue("copyPathAfterSave",  m_copyPathAfterSaveCheck->isChecked());
 
-    m_settings->setValue("darkMode", m_darkModeCheck->isChecked());
-    m_settings->setValue("overlayOpacity", m_opacitySlider->value());
-    m_settings->setValue("crosshairStyle", m_crosshairStyleCombo->currentData().toString());
+    m_settings->setValue("imageFormat",        m_formatCombo->currentData().toString());
+    m_settings->setValue("imageQuality",       m_qualitySpin->value());
+    m_settings->setValue("captureDelay",       m_delaySpin->value());
+    m_settings->setValue("copyAfterCapture",   m_copyAfterCaptureCheck->isChecked());
+    m_settings->setValue("closeAfterCopy",     m_closeAfterCopyCheck->isChecked());
+
+    m_settings->setValue("darkMode",           m_darkModeCheck->isChecked());
+    m_settings->setValue("overlayOpacity",     m_opacitySlider->value());
+    m_settings->setValue("crosshairStyle",     m_crosshairStyleCombo->currentData().toString());
 
     // Araç görünürlüğü
     QStringList visibleTools;
@@ -412,6 +629,11 @@ void SettingsDialog::onSave()
             visibleTools.append(item->data(Qt::UserRole).toString());
     }
     m_settings->setValue("visibleTools", visibleTools);
+
+    // Kısayol tuşu — kaydet ve anında uygula
+    m_settings->setValue("hotkeyModifiers", newMod);
+    m_settings->setValue("hotkeyVKey",      newVKey);
+    HotkeyManager::instance().reRegisterCaptureHotkey(newMod, newVKey);
 
     // Windows otomatik başlatma
 #ifdef Q_OS_WIN
@@ -428,6 +650,10 @@ void SettingsDialog::onSave()
     m_settings->sync();
     accept();
 }
+
+// ---------------------------------------------------------------------------
+// onReset
+// ---------------------------------------------------------------------------
 
 void SettingsDialog::onReset()
 {

@@ -11,6 +11,11 @@
 #include <QTabWidget>
 #include <QLabel>
 #include <QListWidget>
+#include <QKeySequenceEdit>
+
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
 
 class SettingsDialog : public QDialog {
     Q_OBJECT
@@ -26,6 +31,7 @@ private slots:
     void onFilenamePatternChanged(const QString &text);
     void onSelectAllTools();
     void onDeselectAllTools();
+    void onHotkeyChanged(const QKeySequence &seq);
 
 private:
     void loadSettings();
@@ -34,9 +40,13 @@ private:
     QWidget* createCaptureTab();
     QWidget* createAppearanceTab();
     QWidget* createInterfaceTab();
+    QWidget* createHotkeyTab();
     QWidget* createAboutTab();
 
     QString resolvePatternPreview(const QString &pattern) const;
+
+    // Kısayol tuşunu Win32 VK + modifier'a çöz
+    static bool keySequenceToWin32(const QKeySequence &seq, UINT &modifiers, UINT &vkey);
 
     QSettings *m_settings;
 
@@ -65,6 +75,10 @@ private:
 
     // Arayüz - Araç görünürlüğü
     QListWidget *m_toolVisibilityList;
+
+    // Kısayol
+    QKeySequenceEdit *m_hotkeyEdit;
+    QLabel *m_hotkeyStatusLabel;
 };
 
 #endif

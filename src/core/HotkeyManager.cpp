@@ -1,5 +1,6 @@
 #include "HotkeyManager.h"
 #include <QApplication>
+#include <QSettings>
 #include <QDebug>
 
 HotkeyManager& HotkeyManager::instance()
@@ -11,10 +12,16 @@ HotkeyManager& HotkeyManager::instance()
 HotkeyManager::HotkeyManager(QObject *parent) : QObject(parent)
 {
     qApp->installNativeEventFilter(this);
-    if (registerHotkey(HOTKEY_CAPTURE, 0, VK_SNAPSHOT))
-        qDebug() << "[HotkeyManager] PrtSc hotkey registered";
+
+    // QSettings'ten kısayol tuşunu oku, varsayılan: PrtSc (modifier=0, vkey=VK_SNAPSHOT)
+    QSettings s("EShot", "EShot");
+    UINT modifiers = static_cast<UINT>(s.value("hotkeyModifiers", 0).toUInt());
+    UINT vkey      = static_cast<UINT>(s.value("hotkeyVKey", VK_SNAPSHOT).toUInt());
+
+    if (registerHotkey(HOTKEY_CAPTURE, modifiers, vkey))
+        qDebug() << "[HotkeyManager] Capture hotkey registered (mod=" << modifiers << " vk=" << vkey << ")";
     else
-        qWarning() << "[HotkeyManager] Failed to register PrtSc. Error:" << GetLastError();
+        qWarning() << "[HotkeyManager] Failed to register hotkey. Error:" << GetLastError();
 }
 
 HotkeyManager::~HotkeyManager()
@@ -48,7 +55,7 @@ bool HotkeyManager::reRegisterCaptureHotkey(UINT modifiers, UINT virtualKey)
 {
     unregisterHotkey(HOTKEY_CAPTURE);
     bool ok = registerHotkey(HOTKEY_CAPTURE, modifiers, virtualKey);
-    if (!ok) registerHotkey(HOTKEY_CAPTURE, 0, VK_SNAPSHOT);
+    if (!ok) registerHotkey(HOTKEY_CAPTURE, 0, VK_SNAPSHOT); // fallback
     return ok;
 }
 

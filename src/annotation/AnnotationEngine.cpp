@@ -234,30 +234,6 @@ void AnnotationEngine::drawAnnotation(QPainter *painter, const Annotation &ann, 
     painter->restore();
 }
 
-void AnnotationEngine::drawBlurEffect(QPainter *painter, const QRect &rect, const QPoint &offset)
-{
-    QRect target = rect.translated(offset);
-    painter->save();
-    QPixmap *dev = dynamic_cast<QPixmap*>(painter->device());
-    if (dev) {
-        QRect clamped = target.intersected(dev->rect());
-        if (!clamped.isEmpty()) {
-            QPixmap region = dev->copy(clamped);
-            int ps = 10;
-            QPixmap pix = QPixmap::fromImage(
-                region.toImage()
-                    .scaled(qMax(1,region.width()/ps), qMax(1,region.height()/ps),
-                            Qt::IgnoreAspectRatio, Qt::FastTransformation)
-                    .scaled(region.width(), region.height(),
-                            Qt::IgnoreAspectRatio, Qt::FastTransformation));
-            painter->drawPixmap(clamped.topLeft(), pix);
-        }
-    } else {
-        painter->fillRect(target, QColor(128,128,128,180));
-    }
-    painter->restore();
-}
-
 void AnnotationEngine::clear()
 {
     m_annotations.clear();
@@ -296,11 +272,64 @@ void AnnotationEngine::addTextAnnotation(const QPoint &pos, const QString &text)
 
 void AnnotationEngine::addCounterAnnotation(const QPoint &pos)
 {
-    m_counterValue++;
-    Annotation a;
-    a.tool = Counter; a.color = m_color; a.penWidth = m_penWidth;
-    a.points.append(pos); a.counterValue = m_counterValue;
-    m_redoStack.clear();
-    m_annotations.append(a);
+    Annotation ann;
+    ann.tool = Counter;
+    ann.color = m_color;
+    ann.penWidth = m_penWidth;
+    ann.points.append(pos);
+    ann.counterValue = ++m_counterValue;
+    m_annotations.append(ann);
     emit annotationAdded();
+}
+
+void AnnotationEngine::setScreenSnapshot(const QPixmap &snapshot)
+{
+    m_screenSnapshot = snapshot;
+}
+
+void AnnotationEngine::setSelectionRect(const QRect &rect)
+{
+    m_selectionRect = rect;
+}
+
+void AnnotationEngine::drawBlurEffect(QPainter *painter, const QRect &rect, const QPoint &offset)
+{
+    QRect target = rect.translated(offset);
+    painter->save();
+
+    if (!m_screenSnapshot.isNull()) {
+        // Hedef区域内ını ekran görüntüsünden al
+        // target painter koordinatlarındadır
+        // Canlı önizleme: painter koordinatları = ekran koordinatları
+        // Son yakalama: painter koordinatları = seçim-relatif koordinatlar
+        QRect sourceRect;
+        if (offset != QPoint(0, 0)) {
+            // Canlı önizleme: offset selRect.topLeft(), target zaten ekran koordinatlarında
+            sourceRect = target;
+        } else {
+            // Son yakalama: target seçim-relatif, ekran koordinatlarına çevir
+            sourceRect = target.translated(m_selectionRect.topLeft());
+        }
+
+        QRect clamped = sourceRect.intersected(m_screenSnapshot.rect());
+        if (!clamped.isEmpty()) {
+            QPixmap region = m_screenSnapshot.copy(clamped);
+            if (!region.isNull()) {
+                int ps = 16; // mozaik piksel boyutu
+                QPixmap pix = QPixmap::fromImage(
+                    region.toImage()
+                        .scaled(qMax(1, region.width() / ps), qMax(1, region.height() / ps),
+                                Qt::IgnoreAspectRatio, Qt::FastTransformation)
+                        .scaled(region.width(), region.height(),
+                                Qt::IgnoreAspectRatio, Qt::FastTransformation));
+                painter->drawPixmap(clamped.topLeft(), pix);
+                painter->restore();
+                return;
+            }
+        }
+    }
+
+    // Fallback: gri dolgu
+    painter->fillRect(target, QColor(128, 128, 128, 180));
+    painter->restore();
 }

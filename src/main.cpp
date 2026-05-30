@@ -100,12 +100,12 @@ private:
             trayIcon = QIcon(pix);
         }
         m_trayIcon->setIcon(trayIcon);
-        m_trayIcon->setToolTip("EShot - Ekran Görüntüsü Aracı\nPrtSc ile yakalama yapın");
+        m_trayIcon->setToolTip("EShot - Ekran Görüntüsü Aracı");
 
         QMenu *menu = new QMenu();
         QAction *captureAction = menu->addAction(QIcon(":/icons/copy.svg"), "Yakala");
         connect(captureAction, &QAction::triggered, this, &EShotApp::onCaptureRequested);
-        QAction *settingsAction = menu->addAction(QIcon(":/icons/save.svg"), "Ayarlar");
+        QAction *settingsAction = menu->addAction(QIcon(":/icons/gear.svg"), "Ayarlar");
         connect(settingsAction, &QAction::triggered, this, &EShotApp::onSettingsRequested);
         QAction *aboutAction = menu->addAction(QIcon(":/icons/pen.svg"), "Hakkında");
         connect(aboutAction, &QAction::triggered, this, &EShotApp::onAboutRequested);
@@ -148,7 +148,7 @@ int main(int argc, char *argv[])
 
     QApplication app(argc, argv);
     app.setApplicationName("EShot");
-    app.setApplicationVersion("1.1.0");
+    app.setApplicationVersion("2.0.0");
     app.setOrganizationName("EShot");
     app.setQuitOnLastWindowClosed(false);
     app.setStyle("Fusion");

@@ -55,6 +55,10 @@ public:
     void addTextAnnotation(const QPoint &pos, const QString &text);
     void addCounterAnnotation(const QPoint &pos);
 
+    void setScreenSnapshot(const QPixmap &snapshot);
+    void setSelectionRect(const QRect &rect);
+    QPixmap screenSnapshot() const { return m_screenSnapshot; }
+
 signals:
     void annotationAdded();
 
@@ -83,6 +87,8 @@ private:
     Annotation m_currentAnnotation;
     bool m_isDrawing;
     int m_counterValue;
+    QPixmap m_screenSnapshot;
+    QRect m_selectionRect;
 };
 
 #endif

@@ -23,7 +23,6 @@ AnnotationToolbar::AnnotationToolbar(QWidget *parent)
     }
     setFixedHeight(48);
 
-    // Görünür araçları yükle
     QSettings s("EShot", "EShot");
     m_visibleTools = s.value("visibleTools",
         QStringList{"Pen","Arrow","Rectangle","Circle","Text","Highlighter","Blur","Counter"})
@@ -72,8 +71,6 @@ void AnnotationToolbar::setupUI()
     m_layout->setContentsMargins(8, 6, 8, 6);
     m_layout->setSpacing(4);
 
-    // Araçlar — sadece görünür olanlar
-    // Araçlar — hepsini oluştur, görünürlüğü refreshTools yönetecek
     m_layout->addWidget(createToolButton(":/icons/pen.svg", "Kalem (P)", AnnotationEngine::Pen, "Pen"));
     m_layout->addWidget(createToolButton(":/icons/arrow.svg", "Ok (A)", AnnotationEngine::Arrow, "Arrow"));
     m_layout->addWidget(createToolButton(":/icons/rectangle.svg", "Dikdörtgen (R)", AnnotationEngine::Rectangle, "Rectangle"));
@@ -83,17 +80,13 @@ void AnnotationToolbar::setupUI()
     m_layout->addWidget(createToolButton(":/icons/blur.svg", "Bulanıklaştır (B)", AnnotationEngine::Blur, "Blur"));
     m_layout->addWidget(createToolButton(":/icons/counter.svg", "Numara (#)", AnnotationEngine::Counter, "Counter"));
 
-    refreshTools(); // İlk görünürlük ayarını yap
+    refreshTools();
 
     m_layout->addWidget(createSeparator());
 
-    // Renk
     m_colorButton = createColorButton(m_currentColor);
     m_layout->addWidget(m_colorButton);
 
-    m_layout->addWidget(createSeparator());
-
-    // Kalınlık
     QSlider *slider = new QSlider(Qt::Horizontal, this);
     slider->setRange(1, 20);
     slider->setValue(3);
@@ -109,22 +102,8 @@ void AnnotationToolbar::setupUI()
 
     m_layout->addWidget(createSeparator());
 
-    // Undo/Redo
     m_layout->addWidget(createActionButton(":/icons/undo.svg", "Geri Al (Ctrl+Z)", "undo"));
     m_layout->addWidget(createActionButton(":/icons/redo.svg", "İleri Al (Ctrl+Y)", "redo"));
-
-    m_layout->addWidget(createSeparator());
-    m_layout->addStretch();
-
-    // Pin
-    m_layout->addWidget(createActionButton(":/icons/pin.svg", "Ekrana Sabitle 📌", "pin"));
-
-    m_layout->addWidget(createSeparator());
-
-    // Ana eylemler
-    m_layout->addWidget(createActionButton(":/icons/copy.svg", "Kopyala (Ctrl+C / Enter)", "copy"));
-    m_layout->addWidget(createActionButton(":/icons/save.svg", "Kaydet (Ctrl+S)", "save"));
-    m_layout->addWidget(createActionButton(":/icons/close.svg", "Kapat (Esc)", "close"));
 
     adjustSize();
 }
@@ -134,8 +113,8 @@ void AnnotationToolbar::applyStyles()
     setStyleSheet(R"(
         AnnotationToolbar {
             background-color: #1a1a1a;
-            border: 1px solid #3d3d3d;
-            border-radius: 10px;
+            border: 2px solid #444;
+            border-radius: 12px;
         }
         QToolTip {
             color: #ffffff;
@@ -147,16 +126,15 @@ void AnnotationToolbar::applyStyles()
     )");
 
     QGraphicsDropShadowEffect *shadow = new QGraphicsDropShadowEffect(this);
-    shadow->setBlurRadius(20);
-    shadow->setColor(QColor(0,0,0,160));
-    shadow->setOffset(0, 4);
+    shadow->setBlurRadius(24);
+    shadow->setColor(QColor(0,0,0,180));
+    shadow->setOffset(0, 6);
     setGraphicsEffect(shadow);
 }
 
 QPushButton* AnnotationToolbar::createToolButton(const QString &iconPath, const QString &tooltip,
                                                   int toolId, const QString &settingsKey)
 {
-
     QPushButton *btn = new QPushButton(this);
     btn->setProperty("settingsKey", settingsKey);
     btn->setToolTip(tooltip);
@@ -188,10 +166,7 @@ QPushButton* AnnotationToolbar::createActionButton(const QString &iconPath, cons
     btn->setIconSize(QSize(18, 18));
 
     QString bg = "transparent", hv = "#3d3d3d";
-    if (action == "copy") { bg = "#0078D4"; hv = "#1084D8"; }
-    else if (action == "save") { bg = "#107C10"; hv = "#1a8c1a"; }
-    else if (action == "close") { bg = "#C42B1C"; hv = "#d43c2d"; }
-    else if (action == "pin") { bg = "#6B4C9A"; hv = "#7D5CB5"; }
+    if (action == "undo" || action == "redo") { bg = "transparent"; hv = "#3d3d3d"; }
 
     btn->setStyleSheet(QString(R"(
         QPushButton { background-color: %1; border: none; border-radius: 6px; }
@@ -242,11 +217,7 @@ void AnnotationToolbar::onActionButtonClicked()
     if (!btn) return;
     QString action = btn->property("action").toString();
 
-    if (action == "copy") emit copyRequested();
-    else if (action == "save") emit saveRequested();
-    else if (action == "close") emit closeRequested();
-    else if (action == "pin") emit pinRequested();
-    else if (action == "undo") emit undoRequested();
+    if (action == "undo") emit undoRequested();
     else if (action == "redo") emit redoRequested();
 }
 

@@ -1,6 +1,7 @@
 #include "PinnedWindow.h"
 
 #include <QPainter>
+#include <QPainterPath>
 #include <QMouseEvent>
 #include <QKeyEvent>
 #include <QMenu>
@@ -10,6 +11,9 @@
 #include <QGuiApplication>
 #include <QDebug>
 
+static constexpr int BAR_HEIGHT = 32;
+static constexpr int CLOSE_BTN_SIZE = 20;
+
 PinnedWindow::PinnedWindow(const QPixmap &pixmap, const QPoint &screenPos, QWidget *parent)
     : QWidget(parent, Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::Tool)
     , m_pixmap(pixmap)
@@ -17,11 +21,11 @@ PinnedWindow::PinnedWindow(const QPixmap &pixmap, const QPoint &screenPos, QWidg
     , m_hovered(false)
 {
     setAttribute(Qt::WA_DeleteOnClose, true);
-    setAttribute(Qt::WA_TranslucentBackground, false);
+    setAttribute(Qt::WA_TranslucentBackground, true);
     setMouseTracking(true);
     setCursor(Qt::SizeAllCursor);
 
-    setFixedSize(m_pixmap.size());
+    setFixedSize(m_pixmap.width() + 2, m_pixmap.height() + BAR_HEIGHT + 2);
     move(screenPos);
     show();
 
@@ -35,55 +39,74 @@ PinnedWindow::~PinnedWindow()
 
 QRect PinnedWindow::closeButtonRect() const
 {
-    int s = 20;
-    return QRect(width() - s - 4, 4, s, s);
+    int x = width() - CLOSE_BTN_SIZE - 8;
+    int y = (BAR_HEIGHT - CLOSE_BTN_SIZE) / 2 + 1;
+    return QRect(x, y, CLOSE_BTN_SIZE, CLOSE_BTN_SIZE);
 }
 
 void PinnedWindow::paintEvent(QPaintEvent *event)
 {
     Q_UNUSED(event);
     QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing);
 
-    // Gölge kenarlık
-    painter.setPen(QPen(QColor(0, 0, 0, 80), 2));
-    painter.drawRect(rect().adjusted(0, 0, -1, -1));
+    // 1. Şeffaf arka plan
+    painter.fillRect(rect(), Qt::transparent);
 
-    // Pixmap
-    painter.drawPixmap(0, 0, m_pixmap);
+    // 2. Pixmap (en alta)
+    painter.drawPixmap(1, BAR_HEIGHT + 1, m_pixmap);
 
-    // Hover durumunda kapatma butonu
+    // 3. Üst bar (her zaman görünür, yuvarlak köşeli)
+    QPainterPath barPath;
+    barPath.addRoundedRect(QRectF(1, 1, width() - 2, BAR_HEIGHT), 6, 6);
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(QColor(20, 20, 20, 210));
+    painter.drawPath(barPath);
+
+    // 4. Hover: kapatma butonu ve pin ikonu
     if (m_hovered) {
-        // Üst kenarda yarı saydam bant
-        painter.fillRect(0, 0, width(), 28, QColor(0, 0, 0, 120));
-
-        // X butonu
+        // Kapatma butonu
         QRect closeRect = closeButtonRect();
         painter.setPen(Qt::NoPen);
-        painter.setBrush(QColor(220, 50, 50, 200));
-        painter.drawRoundedRect(closeRect, 4, 4);
+        painter.setBrush(QColor(70, 70, 70, 200));
+        painter.drawRoundedRect(closeRect, 3, 3);
 
         // X işareti
-        painter.setPen(QPen(Qt::white, 2));
+        painter.setPen(QPen(QColor(200, 200, 200), 1.5));
         int m = 5;
         painter.drawLine(closeRect.left() + m, closeRect.top() + m,
                          closeRect.right() - m, closeRect.bottom() - m);
         painter.drawLine(closeRect.right() - m, closeRect.top() + m,
                          closeRect.left() + m, closeRect.bottom() - m);
 
-        // "Pin" etiketi
-        painter.setPen(Qt::white);
-        QFont f = painter.font();
-        f.setPointSize(8);
+        // Pin ikonu (daire + çizgi)
+        int iconX = 14;
+        int iconY = BAR_HEIGHT / 2;
+        painter.setPen(QPen(QColor(0, 122, 204), 1.5));
+        painter.setBrush(Qt::NoBrush);
+        painter.drawEllipse(QPoint(iconX, iconY - 2), 3, 3);
+        painter.drawLine(iconX, iconY + 1, iconX, iconY + 7);
+
+        // "Pinned" yazısı
+        painter.setPen(QColor(180, 180, 180));
+        QFont f("Segoe UI", 9);
         f.setBold(true);
         painter.setFont(f);
-        painter.drawText(6, 18, "📌 Pinned");
+        painter.drawText(iconX + 8, 0, width() - iconX - 8 - CLOSE_BTN_SIZE - 14, BAR_HEIGHT,
+                         Qt::AlignVCenter, "Pinned");
     }
+
+    // 5. Border (her zaman en üstte)
+    QPainterPath borderPath;
+    borderPath.addRoundedRect(QRectF(1, 1, width() - 2, height() - 2), 7, 7);
+    painter.setPen(QPen(QColor(0, 122, 204), 2));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawPath(borderPath);
 }
 
 void PinnedWindow::mousePressEvent(QMouseEvent *event)
 {
     if (event->button() == Qt::LeftButton) {
-        // Kapatma butonuna tıklama
         if (m_hovered && closeButtonRect().contains(event->pos())) {
             close();
             return;
@@ -98,11 +121,6 @@ void PinnedWindow::mouseMoveEvent(QMouseEvent *event)
     if (m_dragging) {
         move(event->globalPosition().toPoint() - m_dragOffset);
     }
-
-    // Hover durumunu kontrol et (kapatma butonu için)
-    bool wasHovered = m_hovered;
-    // mouse tracking açık olduğundan her harekette buraya gelir
-    if (wasHovered != m_hovered) update();
 }
 
 void PinnedWindow::mouseReleaseEvent(QMouseEvent *event)

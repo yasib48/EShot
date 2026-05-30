@@ -19,10 +19,6 @@ public:
 
 signals:
     void toolSelected(int toolId);
-    void copyRequested();
-    void saveRequested();
-    void closeRequested();
-    void pinRequested();
     void undoRequested();
     void redoRequested();
     void colorChanged(const QColor &color);
@@ -44,7 +40,6 @@ private:
     QPushButton* createColorButton(const QColor &color);
     QWidget* createSeparator();
 
-    // Araç görünürlük kontrolü
     bool isToolVisible(const QString &key) const;
 
     QHBoxLayout *m_layout;

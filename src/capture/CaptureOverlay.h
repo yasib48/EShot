@@ -57,6 +57,7 @@ private:
     QRect m_virtualDesktopRect;
 
     AnnotationToolbar *m_toolbar;
+    QWidget *m_actionPanel;
     AnnotationEngine *m_annotationEngine;
 
     // Boyutlandırma ve Taşıma

@@ -53,3 +53,6 @@ Desktop.ini
 # EShot specific
 *.log
 installer_output/
+EShot_Release/
+EShot_new.exe
+*.new.exe

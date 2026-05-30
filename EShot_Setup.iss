@@ -5,7 +5,7 @@
 ; ============================================================
 
 #define MyAppName      "EShot"
-#define MyAppVersion   "1.1.0"
+#define MyAppVersion   "2.0.0"
 #define MyAppPublisher "EShot"
 #define MyAppURL       "https://github.com/your-repo/EShot"
 #define MyAppExeName   "EShot.exe"
@@ -30,7 +30,6 @@ Compression=lzma2/ultra64
 SolidCompression=yes
 
 WizardStyle=modern
-WizardResizable=no
 
 MinVersion=10.0
 ArchitecturesInstallIn64BitMode=x64compatible

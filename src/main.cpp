@@ -158,6 +158,7 @@ int main(int argc, char *argv[])
     app.setOrganizationName("EShot");
     app.setQuitOnLastWindowClosed(false);
     app.setStyle("Fusion");
+    app.setWindowIcon(QIcon(":/icons/pen.svg"));
 
     QSettings settings("EShot", "EShot");
     if (settings.value("darkMode", true).toBool()) {

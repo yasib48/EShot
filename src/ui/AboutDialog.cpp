@@ -9,6 +9,7 @@
 AboutDialog::AboutDialog(QWidget *parent) : QDialog(parent)
 {
     setWindowTitle(TranslationManager::aboutTitle());
+    setWindowIcon(QIcon(":/icons/pen.svg"));
     setFixedSize(300, 250);
     setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
 

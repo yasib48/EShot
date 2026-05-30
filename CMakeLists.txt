@@ -46,7 +46,7 @@ if(MINGW)
     file(WRITE ${RC_FILE} "1 24 \"${CMAKE_CURRENT_BINARY_DIR}/EShot.manifest\"\n")
     list(APPEND SOURCES ${RC_FILE})
 elseif(MSVC)
-    # list(APPEND SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/EShot.manifest)
+    list(APPEND SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/app.rc)
 endif()
 
 qt_add_executable(${PROJECT_NAME} WIN32

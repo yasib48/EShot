@@ -23,6 +23,7 @@
 SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent)
 {
     setWindowTitle(TranslationManager::settingsTitle());
+    setWindowIcon(QIcon(":/icons/pen.svg"));
     setMinimumSize(560, 580);
     setMaximumSize(750, 720);
 

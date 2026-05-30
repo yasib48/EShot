@@ -30,7 +30,6 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
     : QWidget(parent, Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::Tool)
     , m_isSelecting(false)
     , m_selectionComplete(false)
-    , m_isMovingSelection(false)
     , m_toolbar(nullptr)
     , m_actionPanel(nullptr)
     , m_annotationEngine(nullptr)
@@ -111,8 +110,6 @@ CaptureOverlay::~CaptureOverlay() {}
 
 void CaptureOverlay::startCapture()
 {
-    m_isSelecting = false;
-    m_selectionComplete = false;
     m_isSelecting = false;
     m_selectionComplete = false;
     m_resizeMode = ResNone;
@@ -354,7 +351,7 @@ void CaptureOverlay::mousePressEvent(QMouseEvent *event)
             }
             
             if (selRect.contains(event->pos())) {
-                // ...
+                // Seçim alanında tıklama — mevcut seçimi taşı
             } else {
                 m_selectionComplete = false;
                 m_isSelecting = true;
@@ -469,8 +466,8 @@ void CaptureOverlay::mouseReleaseEvent(QMouseEvent *event)
             if (m_annotationEngine && m_annotationEngine->currentTool() == AnnotationEngine::Text) {
                 if (selRect.contains(event->pos())) {
                     bool ok;
-                    QString text = QInputDialog::getText(this, tr("Metin Ekle"),
-                        tr("Yazı:"), QLineEdit::Normal, "", &ok);
+                    QString text = QInputDialog::getText(this, TranslationManager::toolText(),
+                        TranslationManager::toolText() + ":", QLineEdit::Normal, "", &ok);
                     if (ok && !text.isEmpty()) {
                         m_annotationEngine->addTextAnnotation(rel, text);
                         update();

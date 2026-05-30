@@ -249,7 +249,7 @@ QWidget* SettingsDialog::createCaptureTab()
     m_formatCombo->addItem(TranslationManager::formatPng(), "PNG");
     m_formatCombo->addItem(TranslationManager::formatJpeg(), "JPEG");
     m_formatCombo->addItem(TranslationManager::formatBmp(), "BMP");
-    fmtLayout->addRow(m_langCombo->currentData().toString() == "tr" ? "Format:" : "Format:", m_formatCombo);
+    fmtLayout->addRow("Format:", m_formatCombo);
 
     QHBoxLayout *qLayout = new QHBoxLayout();
     m_qualitySlider = new QSlider(Qt::Horizontal);
@@ -493,7 +493,7 @@ void SettingsDialog::onHotkeyChanged(const QKeySequence &seq)
         m_hotkeyStatusLabel->setText(TranslationManager::hotkeyInvalid());
         m_hotkeyStatusLabel->setStyleSheet("color: #ff9800; font-size: 12px;");
     } else {
-        m_hotkeyStatusLabel->setText(QString("✅ %1: %2").arg(TranslationManager::language()).arg(seq.toString(QKeySequence::NativeText)));
+        m_hotkeyStatusLabel->setText(QString("✅ %1").arg(seq.toString(QKeySequence::NativeText)));
         m_hotkeyStatusLabel->setStyleSheet("color: #4caf50; font-size: 12px;");
     }
 }

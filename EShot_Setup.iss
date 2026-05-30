@@ -70,7 +70,7 @@ Source: "{#ReleaseDir}\networkinformation\*"; DestDir: "{app}\networkinformation
 Source: "{#ReleaseDir}\tls\*";                DestDir: "{app}\tls";                Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\{#MyAppName}";        Filename: "{app}\{#MyAppExeName}"; Comment: "Ekran goruntüsü aracı"
+Name: "{group}\{#MyAppName}";        Filename: "{app}\{#MyAppExeName}"; Comment: "Ekran görüntüsü aracı"
 Name: "{group}\Kaldır {#MyAppName}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}";  Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
@@ -82,3 +82,15 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 
 [UninstallRun]
 Filename: "{cmd}"; Parameters: "/C taskkill /F /IM {#MyAppExeName}"; Flags: runhidden; RunOnceId: "KillEShot"
+
+[Code]
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  ResultCode: Integer;
+begin
+  Result := '';
+  // EShot çalışıyorsa kapat
+  Exec(ExpandConstant('{cmd}'), '/C taskkill /F /IM {#MyAppExeName}', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  // Kısa bir bekleme (dosya kilidinin açılması için)
+  Sleep(500);
+end;

@@ -41,7 +41,6 @@ private:
     QWidget* createAppearanceTab();
     QWidget* createInterfaceTab();
     QWidget* createHotkeyTab();
-    QWidget* createAboutTab();
 
     QString resolvePatternPreview(const QString &pattern) const;
 

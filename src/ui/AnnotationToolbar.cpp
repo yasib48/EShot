@@ -225,7 +225,7 @@ void AnnotationToolbar::onActionButtonClicked()
 void AnnotationToolbar::onColorButtonClicked()
 {
     QColorDialog dlg(m_currentColor, this);
-    dlg.setWindowTitle("Renk Seç");
+    dlg.setWindowTitle(TranslationManager::toolColor());
     if (dlg.exec() == QDialog::Accepted) {
         QColor c = dlg.selectedColor();
         if (c.isValid()) {

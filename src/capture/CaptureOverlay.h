@@ -49,9 +49,6 @@ private:
     QPoint m_selectionEnd;
     bool m_isSelecting;
     bool m_selectionComplete;
-
-    // Seçim taşıma
-    bool m_isMovingSelection;
     QPoint m_moveOffset;
 
     QRect m_virtualDesktopRect;

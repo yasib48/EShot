@@ -44,8 +44,8 @@ Name: "turkish"; MessagesFile: "compiler:Languages\Turkish.isl"
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
-Name: "desktopicon";  Description: "Masaüstüne kısayol oluştur"; GroupDescription: "Ek simgeler:"
-Name: "startupicon";  Description: "Başlangıçta otomatik çalıştır"; GroupDescription: "Başlangıç:"; Flags: unchecked
+Name: "desktopicon";  Description: "Masaüstüne kısayol oluştur / Create desktop shortcut"; GroupDescription: "Ek simgeler / Additional icons:"
+Name: "startupicon";  Description: "Başlangıçta otomatik çalıştır / Auto-start with Windows"; GroupDescription: "Başlangıç / Startup:"; Flags: unchecked
 
 [Files]
 ; Ana uygulama
@@ -75,7 +75,7 @@ Name: "{group}\Kaldır {#MyAppName}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}";  Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\{#MyAppExeName}"; Description: "EShot'u simdi baslat"; Flags: nowait postinstall skipifsilent
+;Filename: "{app}\{#MyAppExeName}"; Description: "EShot'u simdi baslat"; Flags: nowait postinstall skipifsilent
 
 [Registry]
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "{#MyAppName}"; ValueData: """{app}\{#MyAppExeName}"""; Flags: uninsdeletevalue; Tasks: startupicon

@@ -9,6 +9,7 @@
 #include <QPalette>
 
 #include "core/HotkeyManager.h"
+#include "core/TranslationManager.h"
 #include "capture/CaptureOverlay.h"
 #include "ui/SettingsDialog.h"
 #include "ui/AboutDialog.h"
@@ -23,11 +24,11 @@ class EShotApp : public QObject {
 public:
     EShotApp(QObject *parent = nullptr) : QObject(parent)
     {
+        TranslationManager::init();
         loadSettings();
         setupTrayIcon();
         setupOverlay();
         setupHotkey();
-        qDebug() << "[EShot] Application started. Press PrtSc to capture.";
     }
 
     ~EShotApp()
@@ -39,31 +40,22 @@ public:
 private slots:
     void onCaptureRequested()
     {
-        qDebug() << "[EShot] Capture requested";
-        // Fix: eğer overlay zaten görünürdeyse (ss modu aktifse) yeniden başlatma
-        if (m_overlay && m_overlay->isVisible()) {
-            qDebug() << "[EShot] Capture already active, ignoring hotkey.";
-            return;
-        }
+        if (m_overlay && m_overlay->isVisible()) return;
         if (m_overlay) m_overlay->startCapture();
     }
 
     void onCaptureCompleted(const QPixmap &pixmap)
     {
         Q_UNUSED(pixmap);
-        qDebug() << "[EShot] Capture completed, size:" << pixmap.size();
         if (m_trayIcon && m_showNotifications) {
-            m_trayIcon->showMessage("EShot",
-                QString("Ekran görüntüsü alındı (%1x%2)")
-                    .arg(pixmap.width()).arg(pixmap.height()),
+            m_trayIcon->showMessage(
+                TranslationManager::notifCaptureTitle(),
+                TranslationManager::notifCaptureMsg(pixmap.width(), pixmap.height()),
                 QSystemTrayIcon::Information, 2000);
         }
     }
 
-    void onCaptureCancelled()
-    {
-        qDebug() << "[EShot] Capture cancelled";
-    }
+    void onCaptureCancelled() {}
 
     void onTrayActivated(QSystemTrayIcon::ActivationReason reason)
     {
@@ -75,7 +67,10 @@ private slots:
     void onSettingsRequested()
     {
         SettingsDialog dlg;
-        if (dlg.exec() == QDialog::Accepted) loadSettings();
+        if (dlg.exec() == QDialog::Accepted) {
+            loadSettings();
+            rebuildTrayMenu();
+        }
     }
 
     void onAboutRequested()
@@ -91,6 +86,24 @@ private:
         m_showNotifications = s.value("showNotifications", true).toBool();
     }
 
+    void rebuildTrayMenu()
+    {
+        if (!m_trayMenu) return;
+        m_trayMenu->clear();
+
+        QAction *captureAction = m_trayMenu->addAction(QIcon(":/icons/copy.svg"), TranslationManager::trayCapture());
+        connect(captureAction, &QAction::triggered, this, &EShotApp::onCaptureRequested);
+        QAction *settingsAction = m_trayMenu->addAction(QIcon(":/icons/gear.svg"), TranslationManager::traySettings());
+        connect(settingsAction, &QAction::triggered, this, &EShotApp::onSettingsRequested);
+        QAction *aboutAction = m_trayMenu->addAction(QIcon(":/icons/pen.svg"), TranslationManager::trayAbout());
+        connect(aboutAction, &QAction::triggered, this, &EShotApp::onAboutRequested);
+        m_trayMenu->addSeparator();
+        QAction *quitAction = m_trayMenu->addAction(QIcon(":/icons/close.svg"), TranslationManager::trayQuit());
+        connect(quitAction, &QAction::triggered, this, &EShotApp::onQuitAction);
+
+        m_trayIcon->setToolTip(TranslationManager::appTitle());
+    }
+
     void setupTrayIcon()
     {
         m_trayIcon = new QSystemTrayIcon(this);
@@ -100,20 +113,12 @@ private:
             trayIcon = QIcon(pix);
         }
         m_trayIcon->setIcon(trayIcon);
-        m_trayIcon->setToolTip("EShot - Ekran Görüntüsü Aracı");
+        m_trayIcon->setToolTip(TranslationManager::appTitle());
 
-        QMenu *menu = new QMenu();
-        QAction *captureAction = menu->addAction(QIcon(":/icons/copy.svg"), "Yakala");
-        connect(captureAction, &QAction::triggered, this, &EShotApp::onCaptureRequested);
-        QAction *settingsAction = menu->addAction(QIcon(":/icons/gear.svg"), "Ayarlar");
-        connect(settingsAction, &QAction::triggered, this, &EShotApp::onSettingsRequested);
-        QAction *aboutAction = menu->addAction(QIcon(":/icons/pen.svg"), "Hakkında");
-        connect(aboutAction, &QAction::triggered, this, &EShotApp::onAboutRequested);
-        menu->addSeparator();
-        QAction *quitAction = menu->addAction(QIcon(":/icons/close.svg"), "Çıkış");
-        connect(quitAction, &QAction::triggered, this, &EShotApp::onQuitAction);
+        m_trayMenu = new QMenu();
+        rebuildTrayMenu();
 
-        m_trayIcon->setContextMenu(menu);
+        m_trayIcon->setContextMenu(m_trayMenu);
         connect(m_trayIcon, &QSystemTrayIcon::activated, this, &EShotApp::onTrayActivated);
         m_trayIcon->show();
     }
@@ -132,6 +137,7 @@ private:
     }
 
     QSystemTrayIcon *m_trayIcon = nullptr;
+    QMenu *m_trayMenu = nullptr;
     CaptureOverlay *m_overlay = nullptr;
     bool m_showNotifications = true;
 };
@@ -153,7 +159,6 @@ int main(int argc, char *argv[])
     app.setQuitOnLastWindowClosed(false);
     app.setStyle("Fusion");
 
-    // Koyu tema
     QSettings settings("EShot", "EShot");
     if (settings.value("darkMode", true).toBool()) {
         QPalette p;

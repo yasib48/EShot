@@ -79,6 +79,9 @@ private:
     // Kısayol
     QKeySequenceEdit *m_hotkeyEdit;
     QLabel *m_hotkeyStatusLabel;
+
+    // Dil
+    QComboBox *m_langCombo;
 };
 
 #endif

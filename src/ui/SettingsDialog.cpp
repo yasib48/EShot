@@ -1,5 +1,6 @@
 #include "SettingsDialog.h"
 #include "../core/HotkeyManager.h"
+#include "../core/TranslationManager.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -19,15 +20,11 @@
 #include <windows.h>
 #endif
 
-// ---------------------------------------------------------------------------
-// Yapıcı / Yıkıcı
-// ---------------------------------------------------------------------------
-
 SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent)
 {
-    setWindowTitle("EShot Ayarları");
-    setMinimumSize(560, 540);
-    setMaximumSize(750, 680);
+    setWindowTitle(TranslationManager::settingsTitle());
+    setMinimumSize(560, 580);
+    setMaximumSize(750, 720);
 
     m_settings = new QSettings("EShot", "EShot", this);
     setupUI();
@@ -35,10 +32,6 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent)
 }
 
 SettingsDialog::~SettingsDialog() {}
-
-// ---------------------------------------------------------------------------
-// Yardımcı
-// ---------------------------------------------------------------------------
 
 QString SettingsDialog::resolvePatternPreview(const QString &pattern) const
 {
@@ -55,13 +48,11 @@ QString SettingsDialog::resolvePatternPreview(const QString &pattern) const
     return r;
 }
 
-// Qt Key → Win32 VK + Modifier dönüşümü
 bool SettingsDialog::keySequenceToWin32(const QKeySequence &seq, UINT &modifiers, UINT &vkey)
 {
 #ifdef Q_OS_WIN
     if (seq.isEmpty()) return false;
 
-    // Qt'nin ilk kısayolu al
     QKeyCombination combo = seq[0];
     Qt::KeyboardModifiers qtMod = combo.keyboardModifiers();
     Qt::Key qtKey = combo.key();
@@ -72,7 +63,6 @@ bool SettingsDialog::keySequenceToWin32(const QKeySequence &seq, UINT &modifiers
     if (qtMod & Qt::AltModifier)     modifiers |= MOD_ALT;
     if (qtMod & Qt::MetaModifier)    modifiers |= MOD_WIN;
 
-    // Özel tuşlar
     struct { Qt::Key qt; UINT win; } mapping[] = {
         { Qt::Key_Print,      VK_SNAPSHOT },
         { Qt::Key_F1,         VK_F1 }, { Qt::Key_F2,  VK_F2  }, { Qt::Key_F3,  VK_F3  },
@@ -92,7 +82,6 @@ bool SettingsDialog::keySequenceToWin32(const QKeySequence &seq, UINT &modifiers
         if (qtKey == m.qt) { vkey = m.win; return true; }
     }
 
-    // ASCII / alfanumerik
     if (qtKey >= Qt::Key_A && qtKey <= Qt::Key_Z) {
         vkey = 'A' + (qtKey - Qt::Key_A);
         return true;
@@ -108,7 +97,6 @@ bool SettingsDialog::keySequenceToWin32(const QKeySequence &seq, UINT &modifiers
 #endif
 }
 
-// Win32 modifier + VK → Qt KeySequence (görüntüleme için)
 static QKeySequence win32ToKeySequence(UINT modifiers, UINT vkey)
 {
     Qt::KeyboardModifiers qtMod;
@@ -148,42 +136,37 @@ static QKeySequence win32ToKeySequence(UINT modifiers, UINT vkey)
     return QKeySequence(Qt::Key_Print);
 }
 
-// ---------------------------------------------------------------------------
-// UI kurulumu
-// ---------------------------------------------------------------------------
-
 void SettingsDialog::setupUI()
 {
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
     mainLayout->setSpacing(12);
 
-    QLabel *titleLabel = new QLabel("EShot Ayarları");
+    QLabel *titleLabel = new QLabel(TranslationManager::settingsTitle());
     QFont tf = titleLabel->font(); tf.setPointSize(16); tf.setBold(true);
     titleLabel->setFont(tf);
     mainLayout->addWidget(titleLabel);
 
     QTabWidget *tabs = new QTabWidget(this);
-    tabs->addTab(createGeneralTab(),  "Genel");
-    tabs->addTab(createCaptureTab(),  "Yakalama");
-    tabs->addTab(createAppearanceTab(),"Görünüm");
-    tabs->addTab(createInterfaceTab(),"Arayüz");
-    tabs->addTab(createHotkeyTab(),   "Kısayol Tuşu");
+    tabs->addTab(createGeneralTab(),     TranslationManager::tabGeneral());
+    tabs->addTab(createCaptureTab(),     TranslationManager::tabCapture());
+    tabs->addTab(createAppearanceTab(),  TranslationManager::tabAppearance());
+    tabs->addTab(createInterfaceTab(),   TranslationManager::tabInterface());
+    tabs->addTab(createHotkeyTab(),      TranslationManager::tabHotkey());
     mainLayout->addWidget(tabs);
 
-    // Butonlar
     QHBoxLayout *btnLayout = new QHBoxLayout();
     btnLayout->addStretch();
 
-    QPushButton *resetBtn = new QPushButton("Varsayılana Sıfırla");
+    QPushButton *resetBtn = new QPushButton(TranslationManager::reset());
     resetBtn->setStyleSheet("color: #ff6b6b;");
     connect(resetBtn, &QPushButton::clicked, this, &SettingsDialog::onReset);
     btnLayout->addWidget(resetBtn);
 
-    QPushButton *cancelBtn = new QPushButton("İptal");
+    QPushButton *cancelBtn = new QPushButton(TranslationManager::cancel());
     connect(cancelBtn, &QPushButton::clicked, this, &QDialog::reject);
     btnLayout->addWidget(cancelBtn);
 
-    QPushButton *saveBtn = new QPushButton("Kaydet");
+    QPushButton *saveBtn = new QPushButton(TranslationManager::save());
     saveBtn->setDefault(true);
     saveBtn->setStyleSheet(R"(
         QPushButton { background-color: #0078D4; color: white; border: none;
@@ -196,26 +179,34 @@ void SettingsDialog::setupUI()
     mainLayout->addLayout(btnLayout);
 }
 
-// ---------------------------------------------------------------------------
-// Tab: Genel
-// ---------------------------------------------------------------------------
-
 QWidget* SettingsDialog::createGeneralTab()
 {
     QWidget *tab = new QWidget();
     QVBoxLayout *layout = new QVBoxLayout(tab);
 
-    QGroupBox *pathGroup = new QGroupBox("Kayıt Dizini");
+    // Dil seçimi
+    QGroupBox *langGroup = new QGroupBox(TranslationManager::language());
+    QHBoxLayout *langLayout = new QHBoxLayout(langGroup);
+    m_langCombo = new QComboBox();
+    m_langCombo->addItem(TranslationManager::langTurkish(), "tr");
+    m_langCombo->addItem(TranslationManager::langEnglish(), "en");
+    langLayout->addWidget(m_langCombo);
+    langLayout->addStretch();
+    layout->addWidget(langGroup);
+
+    // Kayıt dizini
+    QGroupBox *pathGroup = new QGroupBox(TranslationManager::saveDir());
     QHBoxLayout *pathLayout = new QHBoxLayout(pathGroup);
     m_savePathEdit = new QLineEdit();
-    m_savePathEdit->setPlaceholderText("Ekran görüntülerinin kaydedileceği dizin");
-    QPushButton *browseBtn = new QPushButton("Gözat...");
+    m_savePathEdit->setPlaceholderText(TranslationManager::saveDirDesc());
+    QPushButton *browseBtn = new QPushButton(TranslationManager::browse());
     connect(browseBtn, &QPushButton::clicked, this, &SettingsDialog::onBrowse);
     pathLayout->addWidget(m_savePathEdit);
     pathLayout->addWidget(browseBtn);
     layout->addWidget(pathGroup);
 
-    QGroupBox *fnGroup = new QGroupBox("Dosya Adı Şablonu");
+    // Dosya adı şablonu
+    QGroupBox *fnGroup = new QGroupBox(TranslationManager::filenamePattern());
     QVBoxLayout *fnLayout = new QVBoxLayout(fnGroup);
     m_filenamePatternEdit = new QLineEdit();
     m_filenamePatternEdit->setPlaceholderText("Screenshot_%Y-%M-%D_%h-%m-%s");
@@ -224,21 +215,19 @@ QWidget* SettingsDialog::createGeneralTab()
     m_patternPreviewLabel = new QLabel();
     m_patternPreviewLabel->setStyleSheet("color: #888; font-style: italic;");
     fnLayout->addWidget(m_patternPreviewLabel);
-    QLabel *helpLabel = new QLabel(
-        "<b>Değişkenler:</b> %Y (yıl 4h), %y (yıl 2h), %M (ay), %D (gün), "
-        "%h (saat), %m (dakika), %s (saniye), %T (pencere başlığı)"
-    );
+    QLabel *helpLabel = new QLabel(TranslationManager::patternVars());
     helpLabel->setWordWrap(true);
     helpLabel->setStyleSheet("color: #999; font-size: 11px;");
     fnLayout->addWidget(helpLabel);
     layout->addWidget(fnGroup);
 
-    QGroupBox *genGroup = new QGroupBox("Genel Seçenekler");
+    // Genel seçenekler
+    QGroupBox *genGroup = new QGroupBox(TranslationManager::generalOptions());
     QVBoxLayout *genLayout = new QVBoxLayout(genGroup);
-    m_autoStartCheck        = new QCheckBox("Windows ile birlikte başlat");
-    m_showNotificationsCheck= new QCheckBox("Bildirim göster");
-    m_playSoundCheck        = new QCheckBox("Yakalama sesi çal");
-    m_copyPathAfterSaveCheck= new QCheckBox("Kaydettikten sonra dosya yolunu panoya kopyala");
+    m_autoStartCheck         = new QCheckBox(TranslationManager::autoStart());
+    m_showNotificationsCheck = new QCheckBox(TranslationManager::showNotifications());
+    m_playSoundCheck         = new QCheckBox(TranslationManager::playSound());
+    m_copyPathAfterSaveCheck = new QCheckBox(TranslationManager::copyPathAfterSave());
     genLayout->addWidget(m_autoStartCheck);
     genLayout->addWidget(m_showNotificationsCheck);
     genLayout->addWidget(m_playSoundCheck);
@@ -249,22 +238,18 @@ QWidget* SettingsDialog::createGeneralTab()
     return tab;
 }
 
-// ---------------------------------------------------------------------------
-// Tab: Yakalama
-// ---------------------------------------------------------------------------
-
 QWidget* SettingsDialog::createCaptureTab()
 {
     QWidget *tab = new QWidget();
     QVBoxLayout *layout = new QVBoxLayout(tab);
 
-    QGroupBox *fmtGroup = new QGroupBox("Dosya Formatı");
+    QGroupBox *fmtGroup = new QGroupBox(TranslationManager::fileFormat());
     QFormLayout *fmtLayout = new QFormLayout(fmtGroup);
     m_formatCombo = new QComboBox();
-    m_formatCombo->addItem("PNG (Kayıpsız)", "PNG");
-    m_formatCombo->addItem("JPEG (Küçük dosya)", "JPEG");
-    m_formatCombo->addItem("BMP (Sıkıştırmasız)", "BMP");
-    fmtLayout->addRow("Format:", m_formatCombo);
+    m_formatCombo->addItem(TranslationManager::formatPng(), "PNG");
+    m_formatCombo->addItem(TranslationManager::formatJpeg(), "JPEG");
+    m_formatCombo->addItem(TranslationManager::formatBmp(), "BMP");
+    fmtLayout->addRow(m_langCombo->currentData().toString() == "tr" ? "Format:" : "Format:", m_formatCombo);
 
     QHBoxLayout *qLayout = new QHBoxLayout();
     m_qualitySlider = new QSlider(Qt::Horizontal);
@@ -276,7 +261,7 @@ QWidget* SettingsDialog::createCaptureTab()
     connect(m_qualitySpin, QOverload<int>::of(&QSpinBox::valueChanged), m_qualitySlider, &QSlider::setValue);
     qLayout->addWidget(m_qualitySlider);
     qLayout->addWidget(m_qualitySpin);
-    fmtLayout->addRow("JPEG Kalitesi:", qLayout);
+    fmtLayout->addRow(TranslationManager::jpegQuality(), qLayout);
 
     connect(m_formatCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), [this](int idx) {
         bool jpeg = (m_formatCombo->itemData(idx).toString() == "JPEG");
@@ -285,17 +270,17 @@ QWidget* SettingsDialog::createCaptureTab()
     });
     layout->addWidget(fmtGroup);
 
-    QGroupBox *capGroup = new QGroupBox("Yakalama Ayarları");
+    QGroupBox *capGroup = new QGroupBox(TranslationManager::captureSettings());
     QFormLayout *capLayout = new QFormLayout(capGroup);
     m_delaySpin = new QSpinBox();
     m_delaySpin->setRange(0, 10000);
     m_delaySpin->setSingleStep(500);
     m_delaySpin->setSuffix(" ms");
-    m_delaySpin->setSpecialValueText("Gecikme yok");
-    capLayout->addRow("Gecikme:", m_delaySpin);
-    m_copyAfterCaptureCheck = new QCheckBox("Yakaladıktan sonra panoya kopyala");
+    m_delaySpin->setSpecialValueText(TranslationManager::noDelay());
+    capLayout->addRow(TranslationManager::delay(), m_delaySpin);
+    m_copyAfterCaptureCheck = new QCheckBox(TranslationManager::copyAfterCapture());
     capLayout->addRow(m_copyAfterCaptureCheck);
-    m_closeAfterCopyCheck = new QCheckBox("Kopyaladıktan sonra overlay'i kapat");
+    m_closeAfterCopyCheck = new QCheckBox(TranslationManager::closeAfterCopy());
     capLayout->addRow(m_closeAfterCopyCheck);
     layout->addWidget(capGroup);
 
@@ -303,22 +288,18 @@ QWidget* SettingsDialog::createCaptureTab()
     return tab;
 }
 
-// ---------------------------------------------------------------------------
-// Tab: Görünüm
-// ---------------------------------------------------------------------------
-
 QWidget* SettingsDialog::createAppearanceTab()
 {
     QWidget *tab = new QWidget();
     QVBoxLayout *layout = new QVBoxLayout(tab);
 
-    QGroupBox *themeGroup = new QGroupBox("Tema");
+    QGroupBox *themeGroup = new QGroupBox(TranslationManager::theme());
     QVBoxLayout *themeLayout = new QVBoxLayout(themeGroup);
-    m_darkModeCheck = new QCheckBox("Koyu tema kullan (yeniden başlatma gerekir)");
+    m_darkModeCheck = new QCheckBox(TranslationManager::darkMode());
     themeLayout->addWidget(m_darkModeCheck);
     layout->addWidget(themeGroup);
 
-    QGroupBox *overlayGroup = new QGroupBox("Overlay Ayarları");
+    QGroupBox *overlayGroup = new QGroupBox(TranslationManager::overlaySettings());
     QFormLayout *overlayLayout = new QFormLayout(overlayGroup);
     QHBoxLayout *opLayout = new QHBoxLayout();
     m_opacitySlider = new QSlider(Qt::Horizontal);
@@ -332,31 +313,27 @@ QWidget* SettingsDialog::createAppearanceTab()
     });
     opLayout->addWidget(m_opacitySlider);
     opLayout->addWidget(m_opacityValueLabel);
-    overlayLayout->addRow("Arka Plan Opaklığı:", opLayout);
+    overlayLayout->addRow(TranslationManager::bgOpacity(), opLayout);
     m_crosshairStyleCombo = new QComboBox();
-    m_crosshairStyleCombo->addItem("Kesikli çizgi", "dash");
-    m_crosshairStyleCombo->addItem("Düz çizgi", "solid");
-    m_crosshairStyleCombo->addItem("Kapalı", "none");
-    overlayLayout->addRow("Crosshair:", m_crosshairStyleCombo);
+    m_crosshairStyleCombo->addItem(TranslationManager::crossDash(), "dash");
+    m_crosshairStyleCombo->addItem(TranslationManager::crossSolid(), "solid");
+    m_crosshairStyleCombo->addItem(TranslationManager::crossNone(), "none");
+    overlayLayout->addRow(TranslationManager::crosshair(), m_crosshairStyleCombo);
     layout->addWidget(overlayGroup);
 
     layout->addStretch();
     return tab;
 }
 
-// ---------------------------------------------------------------------------
-// Tab: Arayüz
-// ---------------------------------------------------------------------------
-
 QWidget* SettingsDialog::createInterfaceTab()
 {
     QWidget *tab = new QWidget();
     QVBoxLayout *layout = new QVBoxLayout(tab);
 
-    QGroupBox *toolsGroup = new QGroupBox("Araç Çubuğu Görünürlüğü");
+    QGroupBox *toolsGroup = new QGroupBox(TranslationManager::toolbarVisibility());
     QVBoxLayout *toolsLayout = new QVBoxLayout(toolsGroup);
 
-    QLabel *infoLabel = new QLabel("Toolbar'da gösterilecek araçları seçin:");
+    QLabel *infoLabel = new QLabel(TranslationManager::toolbarDesc());
     infoLabel->setStyleSheet("color: #999;");
     toolsLayout->addWidget(infoLabel);
 
@@ -365,14 +342,14 @@ QWidget* SettingsDialog::createInterfaceTab()
 
     struct ToolInfo { QString key; QString label; };
     QVector<ToolInfo> tools = {
-        {"Pen",         "✏️ Kalem"},
-        {"Arrow",       "➡️ Ok"},
-        {"Rectangle",   "⬜ Dikdörtgen"},
-        {"Circle",      "⭕ Çember / Elips"},
-        {"Text",        "🔤 Metin"},
-        {"Highlighter", "🖍️ Vurgulayıcı"},
-        {"Blur",        "🔲 Bulanıklaştır"},
-        {"Counter",     "🔢 Numara Sayacı"},
+        {"Pen",         TranslationManager::toolListPen()},
+        {"Arrow",       TranslationManager::toolListArrow()},
+        {"Rectangle",   TranslationManager::toolListRect()},
+        {"Circle",      TranslationManager::toolListCircle()},
+        {"Text",        TranslationManager::toolListText()},
+        {"Highlighter", TranslationManager::toolListHighlight()},
+        {"Blur",        TranslationManager::toolListBlur()},
+        {"Counter",     TranslationManager::toolListCounter()},
     };
 
     for (const auto &t : tools) {
@@ -385,8 +362,8 @@ QWidget* SettingsDialog::createInterfaceTab()
     toolsLayout->addWidget(m_toolVisibilityList);
 
     QHBoxLayout *selBtnLayout = new QHBoxLayout();
-    QPushButton *selectAllBtn   = new QPushButton("Tümünü Seç");
-    QPushButton *deselectAllBtn = new QPushButton("Tümünü Kaldır");
+    QPushButton *selectAllBtn   = new QPushButton(TranslationManager::selectAll());
+    QPushButton *deselectAllBtn = new QPushButton(TranslationManager::deselectAll());
     connect(selectAllBtn,   &QPushButton::clicked, this, &SettingsDialog::onSelectAllTools);
     connect(deselectAllBtn, &QPushButton::clicked, this, &SettingsDialog::onDeselectAllTools);
     selBtnLayout->addWidget(selectAllBtn);
@@ -399,24 +376,16 @@ QWidget* SettingsDialog::createInterfaceTab()
     return tab;
 }
 
-// ---------------------------------------------------------------------------
-// Tab: Kısayol Tuşu  *** YENİ ***
-// ---------------------------------------------------------------------------
-
 QWidget* SettingsDialog::createHotkeyTab()
 {
     QWidget *tab = new QWidget();
     QVBoxLayout *layout = new QVBoxLayout(tab);
     layout->setSpacing(12);
 
-    QGroupBox *group = new QGroupBox("Yakalama Kısayol Tuşu");
+    QGroupBox *group = new QGroupBox(TranslationManager::hotkeyTitle());
     QVBoxLayout *gl = new QVBoxLayout(group);
 
-    QLabel *desc = new QLabel(
-        "Ekran görüntüsü almak için kullanılacak kısayol tuşunu aşağıya tıklayıp "
-        "yeni kısayolu basarak ayarlayın.\n\n"
-        "Varsayılan: <b>Print Screen</b>"
-    );
+    QLabel *desc = new QLabel(TranslationManager::hotkeyDesc());
     desc->setWordWrap(true);
     desc->setStyleSheet("color: #ccc; font-size: 12px;");
     gl->addWidget(desc);
@@ -439,21 +408,18 @@ QWidget* SettingsDialog::createHotkeyTab()
             this, &SettingsDialog::onHotkeyChanged);
     gl->addWidget(m_hotkeyEdit);
 
-    m_hotkeyStatusLabel = new QLabel("✅ Kısayol geçerli.");
+    m_hotkeyStatusLabel = new QLabel(TranslationManager::hotkeyValid());
     m_hotkeyStatusLabel->setStyleSheet("color: #4caf50; font-size: 12px;");
     gl->addWidget(m_hotkeyStatusLabel);
 
-    QPushButton *resetHkBtn = new QPushButton("🔄 Varsayılana Döndür (Print Screen)");
+    QPushButton *resetHkBtn = new QPushButton(TranslationManager::hotkeyReset());
     resetHkBtn->setStyleSheet("color: #aaa;");
     connect(resetHkBtn, &QPushButton::clicked, [this]() {
         m_hotkeyEdit->setKeySequence(QKeySequence(Qt::Key_Print));
     });
     gl->addWidget(resetHkBtn);
 
-    QLabel *noteLabel = new QLabel(
-        "⚠️ Not: Bazı sistem kısayolları (Win+L, Ctrl+Alt+Del vb.) engellenemez. "
-        "Modifier tuşları (Ctrl, Alt, Shift) ile kombinasyon tavsiye edilir."
-    );
+    QLabel *noteLabel = new QLabel(TranslationManager::hotkeyNote());
     noteLabel->setWordWrap(true);
     noteLabel->setStyleSheet("color: #888; font-size: 11px;");
     gl->addWidget(noteLabel);
@@ -462,10 +428,6 @@ QWidget* SettingsDialog::createHotkeyTab()
     layout->addStretch();
     return tab;
 }
-
-// ---------------------------------------------------------------------------
-// loadSettings
-// ---------------------------------------------------------------------------
 
 void SettingsDialog::loadSettings()
 {
@@ -479,6 +441,11 @@ void SettingsDialog::loadSettings()
     m_showNotificationsCheck->setChecked(m_settings->value("showNotifications", true).toBool());
     m_playSoundCheck->setChecked(m_settings->value("playSound", false).toBool());
     m_copyPathAfterSaveCheck->setChecked(m_settings->value("copyPathAfterSave", false).toBool());
+
+    // Dil
+    QString lang = m_settings->value("language", TranslationManager::langCode()).toString();
+    int li = m_langCombo->findData(lang);
+    if (li >= 0) m_langCombo->setCurrentIndex(li);
 
     QString fmt = m_settings->value("imageFormat", "PNG").toString();
     int fi = m_formatCombo->findData(fmt);
@@ -502,7 +469,6 @@ void SettingsDialog::loadSettings()
     int ci = m_crosshairStyleCombo->findData(cross);
     if (ci >= 0) m_crosshairStyleCombo->setCurrentIndex(ci);
 
-    // Araç görünürlüğü
     QStringList visibleTools = m_settings->value("visibleTools",
         QStringList{"Pen","Arrow","Rectangle","Circle","Text","Highlighter","Blur","Counter"})
         .toStringList();
@@ -512,54 +478,37 @@ void SettingsDialog::loadSettings()
         item->setCheckState(visibleTools.contains(key) ? Qt::Checked : Qt::Unchecked);
     }
 
-    // Kısayol tuşu
     UINT savedMod  = static_cast<UINT>(m_settings->value("hotkeyModifiers", 0).toUInt());
     UINT savedVKey = static_cast<UINT>(m_settings->value("hotkeyVKey", VK_SNAPSHOT).toUInt());
     m_hotkeyEdit->setKeySequence(win32ToKeySequence(savedMod, savedVKey));
-    m_hotkeyStatusLabel->setText("✅ Kısayol geçerli.");
+    m_hotkeyStatusLabel->setText(TranslationManager::hotkeyValid());
     m_hotkeyStatusLabel->setStyleSheet("color: #4caf50; font-size: 12px;");
 }
-
-// ---------------------------------------------------------------------------
-// Slot: kısayol değiştiğinde anlık doğrulama
-// ---------------------------------------------------------------------------
 
 void SettingsDialog::onHotkeyChanged(const QKeySequence &seq)
 {
     UINT mod = 0, vk = 0;
     bool ok = keySequenceToWin32(seq, mod, vk);
     if (!ok || seq.isEmpty()) {
-        m_hotkeyStatusLabel->setText("⚠️ Geçersiz kısayol. Lütfen tekrar deneyin.");
+        m_hotkeyStatusLabel->setText(TranslationManager::hotkeyInvalid());
         m_hotkeyStatusLabel->setStyleSheet("color: #ff9800; font-size: 12px;");
     } else {
-        m_hotkeyStatusLabel->setText(QString("✅ Kısayol: %1").arg(seq.toString(QKeySequence::NativeText)));
+        m_hotkeyStatusLabel->setText(QString("✅ %1: %2").arg(TranslationManager::language()).arg(seq.toString(QKeySequence::NativeText)));
         m_hotkeyStatusLabel->setStyleSheet("color: #4caf50; font-size: 12px;");
     }
 }
 
-// ---------------------------------------------------------------------------
-// Slot: Dosya adı şablonu önizleme
-// ---------------------------------------------------------------------------
-
 void SettingsDialog::onFilenamePatternChanged(const QString &text)
 {
     QString preview = resolvePatternPreview(text);
-    m_patternPreviewLabel->setText("Önizleme: " + preview + ".png");
+    m_patternPreviewLabel->setText(TranslationManager::patternPreview() + ": " + preview + ".png");
 }
-
-// ---------------------------------------------------------------------------
-// Slot: Gözat
-// ---------------------------------------------------------------------------
 
 void SettingsDialog::onBrowse()
 {
-    QString dir = QFileDialog::getExistingDirectory(this, "Klasör Seç", m_savePathEdit->text());
+    QString dir = QFileDialog::getExistingDirectory(this, TranslationManager::saveDir(), m_savePathEdit->text());
     if (!dir.isEmpty()) m_savePathEdit->setText(dir);
 }
-
-// ---------------------------------------------------------------------------
-// Slot: Araç seçimi
-// ---------------------------------------------------------------------------
 
 void SettingsDialog::onSelectAllTools()
 {
@@ -573,37 +522,34 @@ void SettingsDialog::onDeselectAllTools()
         m_toolVisibilityList->item(i)->setCheckState(Qt::Unchecked);
 }
 
-// ---------------------------------------------------------------------------
-// onSave
-// ---------------------------------------------------------------------------
-
 void SettingsDialog::onSave()
 {
     QString savePath = m_savePathEdit->text();
     if (!savePath.isEmpty()) {
         QDir dir(savePath);
         if (!dir.exists() && !dir.mkpath(".")) {
-            QMessageBox::warning(this, "Hata", "Kayıt dizini oluşturulamadı: " + savePath);
+            QMessageBox::warning(this, TranslationManager::errTitle(), TranslationManager::errSaveDir() + savePath);
             return;
         }
     }
 
-    // Kısayol doğrulama
     QKeySequence seq = m_hotkeyEdit->keySequence();
     UINT newMod = 0, newVKey = 0;
     if (!seq.isEmpty()) {
         if (!keySequenceToWin32(seq, newMod, newVKey)) {
-            QMessageBox::warning(this, "Geçersiz Kısayol",
-                "Seçilen kısayol tuşu geçerli değil.\n"
-                "Lütfen geçerli bir kısayol seçin veya varsayılan olarak bırakın.");
+            QMessageBox::warning(this, TranslationManager::errInvalidHotkeyTitle(), TranslationManager::errInvalidHotkey());
             return;
         }
     } else {
-        // Boş bırakıldıysa PrtSc varsayılan
         newMod  = 0;
         newVKey = VK_SNAPSHOT;
     }
 
+    // Dil kaydet
+    QString newLang = m_langCombo->currentData().toString();
+    TranslationManager::setLanguage(newLang == "tr" ? TranslationManager::Turkish : TranslationManager::English);
+
+    m_settings->setValue("language",          newLang);
     m_settings->setValue("savePath",          savePath);
     m_settings->setValue("filenamePattern",    m_filenamePatternEdit->text());
     m_settings->setValue("autoStart",          m_autoStartCheck->isChecked());
@@ -621,7 +567,6 @@ void SettingsDialog::onSave()
     m_settings->setValue("overlayOpacity",     m_opacitySlider->value());
     m_settings->setValue("crosshairStyle",     m_crosshairStyleCombo->currentData().toString());
 
-    // Araç görünürlüğü
     QStringList visibleTools;
     for (int i = 0; i < m_toolVisibilityList->count(); ++i) {
         QListWidgetItem *item = m_toolVisibilityList->item(i);
@@ -630,12 +575,10 @@ void SettingsDialog::onSave()
     }
     m_settings->setValue("visibleTools", visibleTools);
 
-    // Kısayol tuşu — kaydet ve anında uygula
     m_settings->setValue("hotkeyModifiers", newMod);
     m_settings->setValue("hotkeyVKey",      newVKey);
     HotkeyManager::instance().reRegisterCaptureHotkey(newMod, newVKey);
 
-    // Windows otomatik başlatma
 #ifdef Q_OS_WIN
     QSettings reg("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
                    QSettings::NativeFormat);
@@ -651,17 +594,14 @@ void SettingsDialog::onSave()
     accept();
 }
 
-// ---------------------------------------------------------------------------
-// onReset
-// ---------------------------------------------------------------------------
-
 void SettingsDialog::onReset()
 {
-    if (QMessageBox::question(this, "Sıfırla",
-            "Tüm ayarlar varsayılan değerlere sıfırlansın mı?",
+    if (QMessageBox::question(this, TranslationManager::resetTitle(),
+            TranslationManager::resetConfirm(),
             QMessageBox::Yes | QMessageBox::No, QMessageBox::No) == QMessageBox::Yes) {
         m_settings->clear();
         m_settings->sync();
+        TranslationManager::init();
         loadSettings();
     }
 }

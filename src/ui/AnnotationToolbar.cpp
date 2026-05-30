@@ -1,5 +1,6 @@
 #include "AnnotationToolbar.h"
 #include "annotation/AnnotationEngine.h"
+#include "../core/TranslationManager.h"
 #include <QColorDialog>
 #include <QSlider>
 #include <QLabel>
@@ -71,14 +72,14 @@ void AnnotationToolbar::setupUI()
     m_layout->setContentsMargins(8, 6, 8, 6);
     m_layout->setSpacing(4);
 
-    m_layout->addWidget(createToolButton(":/icons/pen.svg", "Kalem (P)", AnnotationEngine::Pen, "Pen"));
-    m_layout->addWidget(createToolButton(":/icons/arrow.svg", "Ok (A)", AnnotationEngine::Arrow, "Arrow"));
-    m_layout->addWidget(createToolButton(":/icons/rectangle.svg", "Dikdörtgen (R)", AnnotationEngine::Rectangle, "Rectangle"));
-    m_layout->addWidget(createToolButton(":/icons/circle.svg", "Çember (C) [Shift=Tam Daire]", AnnotationEngine::Circle, "Circle"));
-    m_layout->addWidget(createToolButton(":/icons/text.svg", "Metin (T)", AnnotationEngine::Text, "Text"));
-    m_layout->addWidget(createToolButton(":/icons/highlighter.svg", "Vurgulayıcı (H)", AnnotationEngine::Highlighter, "Highlighter"));
-    m_layout->addWidget(createToolButton(":/icons/blur.svg", "Bulanıklaştır (B)", AnnotationEngine::Blur, "Blur"));
-    m_layout->addWidget(createToolButton(":/icons/counter.svg", "Numara (#)", AnnotationEngine::Counter, "Counter"));
+    m_layout->addWidget(createToolButton(":/icons/pen.svg", TranslationManager::toolPen(), AnnotationEngine::Pen, "Pen"));
+    m_layout->addWidget(createToolButton(":/icons/arrow.svg", TranslationManager::toolArrow(), AnnotationEngine::Arrow, "Arrow"));
+    m_layout->addWidget(createToolButton(":/icons/rectangle.svg", TranslationManager::toolRect(), AnnotationEngine::Rectangle, "Rectangle"));
+    m_layout->addWidget(createToolButton(":/icons/circle.svg", TranslationManager::toolCircle(), AnnotationEngine::Circle, "Circle"));
+    m_layout->addWidget(createToolButton(":/icons/text.svg", TranslationManager::toolText(), AnnotationEngine::Text, "Text"));
+    m_layout->addWidget(createToolButton(":/icons/highlighter.svg", TranslationManager::toolHighlighter(), AnnotationEngine::Highlighter, "Highlighter"));
+    m_layout->addWidget(createToolButton(":/icons/blur.svg", TranslationManager::toolBlur(), AnnotationEngine::Blur, "Blur"));
+    m_layout->addWidget(createToolButton(":/icons/counter.svg", TranslationManager::toolCounter(), AnnotationEngine::Counter, "Counter"));
 
     refreshTools();
 
@@ -91,7 +92,7 @@ void AnnotationToolbar::setupUI()
     slider->setRange(1, 20);
     slider->setValue(3);
     slider->setFixedWidth(70);
-    slider->setToolTip("Çizgi Kalınlığı");
+    slider->setToolTip(TranslationManager::toolWidth());
     slider->setStyleSheet(R"(
         QSlider::groove:horizontal { background: #444; height: 4px; border-radius: 2px; }
         QSlider::handle:horizontal { background: #0078D4; width: 14px; height: 14px; margin: -5px 0; border-radius: 7px; }
@@ -102,8 +103,8 @@ void AnnotationToolbar::setupUI()
 
     m_layout->addWidget(createSeparator());
 
-    m_layout->addWidget(createActionButton(":/icons/undo.svg", "Geri Al (Ctrl+Z)", "undo"));
-    m_layout->addWidget(createActionButton(":/icons/redo.svg", "İleri Al (Ctrl+Y)", "redo"));
+    m_layout->addWidget(createActionButton(":/icons/undo.svg", TranslationManager::toolUndo(), "undo"));
+    m_layout->addWidget(createActionButton(":/icons/redo.svg", TranslationManager::toolRedo(), "redo"));
 
     adjustSize();
 }
@@ -181,7 +182,7 @@ QPushButton* AnnotationToolbar::createActionButton(const QString &iconPath, cons
 QPushButton* AnnotationToolbar::createColorButton(const QColor &color)
 {
     QPushButton *btn = new QPushButton(this);
-    btn->setToolTip("Renk Seç");
+    btn->setToolTip(TranslationManager::toolColor());
     btn->setCursor(Qt::PointingHandCursor);
     btn->setFixedSize(26, 26);
     btn->setStyleSheet(QString(R"(

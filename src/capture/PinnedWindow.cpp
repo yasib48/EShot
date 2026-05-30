@@ -10,6 +10,7 @@
 #include <QClipboard>
 #include <QGuiApplication>
 #include <QDebug>
+#include "../core/TranslationManager.h"
 
 static constexpr int BAR_HEIGHT = 32;
 static constexpr int CLOSE_BTN_SIZE = 20;
@@ -93,7 +94,7 @@ void PinnedWindow::paintEvent(QPaintEvent *event)
         f.setBold(true);
         painter.setFont(f);
         painter.drawText(iconX + 8, 0, width() - iconX - 8 - CLOSE_BTN_SIZE - 14, BAR_HEIGHT,
-                         Qt::AlignVCenter, "Pinned");
+                         Qt::AlignVCenter, TranslationManager::pinnedLabel());
     }
 
     // 5. Border (her zaman en üstte)
@@ -155,14 +156,14 @@ void PinnedWindow::contextMenuEvent(QContextMenuEvent *event)
 {
     QMenu menu(this);
 
-    QAction *copyAction = menu.addAction("Kopyala");
+    QAction *copyAction = menu.addAction(TranslationManager::pinnedCopy());
     connect(copyAction, &QAction::triggered, [this]() {
         QGuiApplication::clipboard()->setPixmap(m_pixmap);
     });
 
     menu.addSeparator();
 
-    QAction *closeAction = menu.addAction("Kapat");
+    QAction *closeAction = menu.addAction(TranslationManager::pinnedClose());
     connect(closeAction, &QAction::triggered, this, &QWidget::close);
 
     menu.exec(event->globalPos());

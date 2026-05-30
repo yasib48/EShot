@@ -1,4 +1,5 @@
 #include "AboutDialog.h"
+#include "../core/TranslationManager.h"
 #include <QVBoxLayout>
 #include <QLabel>
 #include <QPushButton>
@@ -7,9 +8,8 @@
 
 AboutDialog::AboutDialog(QWidget *parent) : QDialog(parent)
 {
-    setWindowTitle("Hakkında - EShot");
+    setWindowTitle(TranslationManager::aboutTitle());
     setFixedSize(300, 250);
-    // Pencere ikonunu kaldır (daha temiz görünüm için) veya ayarla
     setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);
 
     setupUI();
@@ -23,17 +23,14 @@ void AboutDialog::setupUI()
     layout->setSpacing(10);
     layout->setContentsMargins(20, 20, 20, 20);
 
-    // 1. Logo (Küçük ve Smooth)
     QLabel *iconLabel = new QLabel();
-    QPixmap icon(":/icons/pen.svg"); // Uygulamanın ana ikonu
+    QPixmap icon(":/icons/pen.svg");
     if (!icon.isNull()) {
-        // 48x48 boyutuna, yüksek kalitede ölçekle
         iconLabel->setPixmap(icon.scaled(48, 48, Qt::KeepAspectRatio, Qt::SmoothTransformation));
     }
     iconLabel->setAlignment(Qt::AlignCenter);
     layout->addWidget(iconLabel);
 
-    // 2. Uygulama Adı
     QLabel *nameLabel = new QLabel("EShot");
     QFont nameFont = nameLabel->font();
     nameFont.setPointSize(18);
@@ -42,16 +39,17 @@ void AboutDialog::setupUI()
     nameLabel->setAlignment(Qt::AlignCenter);
     layout->addWidget(nameLabel);
 
-    // 3. Sürüm
-    QLabel *verLabel = new QLabel("Sürüm 1.1.0");
+    QLabel *verLabel = new QLabel(QString("Version %1").arg(QApplication::applicationVersion()));
     verLabel->setAlignment(Qt::AlignCenter);
     verLabel->setStyleSheet("color: #888; font-size: 11px;");
     layout->addWidget(verLabel);
 
-    // 4. Açıklama / Credit
     QLabel *descLabel = new QLabel(
-        "Gelişmiş Windows Ekran Alıntısı Aracı<br>"
-        "<a href='https://github.com/Benoks/EShot' style='color: #4285F4; text-decoration: none;'>GitHub Sayfası</a>"
+        TranslationManager::langCode() == "tr"
+            ? "Gelişmiş Windows Ekran Alıntısı Aracı<br>"
+              "<a href='https://github.com/Benoks/EShot' style='color: #4285F4; text-decoration: none;'>GitHub Sayfası</a>"
+            : "Advanced Windows Screenshot Tool<br>"
+              "<a href='https://github.com/Benoks/EShot' style='color: #4285F4; text-decoration: none;'>GitHub Page</a>"
     );
     descLabel->setAlignment(Qt::AlignCenter);
     descLabel->setOpenExternalLinks(true);
@@ -60,8 +58,7 @@ void AboutDialog::setupUI()
 
     layout->addStretch();
 
-    // 5. Kapat Butonu
-    QPushButton *closeBtn = new QPushButton("Kapat");
+    QPushButton *closeBtn = new QPushButton(TranslationManager::cancel());
     closeBtn->setCursor(Qt::PointingHandCursor);
     closeBtn->setStyleSheet(R"(
         QPushButton {
@@ -78,7 +75,6 @@ void AboutDialog::setupUI()
     )");
     connect(closeBtn, &QPushButton::clicked, this, &QDialog::accept);
     
-    // Ortala
     QHBoxLayout *btnLayout = new QHBoxLayout();
     btnLayout->addStretch();
     btnLayout->addWidget(closeBtn);

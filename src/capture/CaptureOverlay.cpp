@@ -2,6 +2,7 @@
 #include "PinnedWindow.h"
 #include "annotation/AnnotationEngine.h"
 #include "ui/AnnotationToolbar.h"
+#include "../core/TranslationManager.h"
 
 #include <QPainter>
 #include <QScreen>
@@ -74,19 +75,19 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
             actionLayout->addWidget(btn);
             return btn;
         };
-        QPushButton *pinBtn = addBtn(":/icons/pin.svg", "Ekrana Sabitle 📌",
+        QPushButton *pinBtn = addBtn(":/icons/pin.svg", TranslationManager::actionPin(),
             [this]() { onPinToDesktop(); });
         pinBtn->setStyleSheet("QPushButton { background-color: #6B4C9A; border: none; border-radius: 6px; }"
                               "QPushButton:hover { background-color: #7D5CB5; }");
-        QPushButton *copyBtn = addBtn(":/icons/copy.svg", "Kopyala (Ctrl+C / Enter)",
+        QPushButton *copyBtn = addBtn(":/icons/copy.svg", TranslationManager::actionCopy(),
             [this]() { onCopyToClipboard(); });
         copyBtn->setStyleSheet("QPushButton { background-color: #0078D4; border: none; border-radius: 6px; }"
                                "QPushButton:hover { background-color: #1084D8; }");
-        QPushButton *saveBtn = addBtn(":/icons/save.svg", "Kaydet (Ctrl+S)",
+        QPushButton *saveBtn = addBtn(":/icons/save.svg", TranslationManager::actionSave(),
             [this]() { onSave(); });
         saveBtn->setStyleSheet("QPushButton { background-color: #107C10; border: none; border-radius: 6px; }"
                                "QPushButton:hover { background-color: #1a8c1a; }");
-        QPushButton *closeBtn = addBtn(":/icons/close.svg", "Kapat (Esc)",
+        QPushButton *closeBtn = addBtn(":/icons/close.svg", TranslationManager::actionClose(),
             [this]() { onClose(); });
         closeBtn->setStyleSheet("QPushButton { background-color: #C42B1C; border: none; border-radius: 6px; }"
                                 "QPushButton:hover { background-color: #d43c2d; }");

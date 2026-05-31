@@ -5,7 +5,7 @@
 ; ============================================================
 
 #define MyAppName      "EShot"
-#define MyAppVersion   "2.2.0"
+#define MyAppVersion   "2.2.1"
 #define MyAppPublisher "EShot"
 #define MyAppURL       "https://github.com/Benoks/EShot"
 #define MyAppExeName   "EShot.exe"

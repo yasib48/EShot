@@ -44,6 +44,12 @@ private slots:
         if (m_overlay) m_overlay->startCapture();
     }
 
+    void onWindowCaptureRequested()
+    {
+        if (m_overlay && m_overlay->isVisible()) return;
+        if (m_overlay) m_overlay->startWindowCapture();
+    }
+
     void onCaptureCompleted(const QPixmap &pixmap)
     {
         Q_UNUSED(pixmap);
@@ -93,6 +99,8 @@ private:
 
         QAction *captureAction = m_trayMenu->addAction(QIcon(":/icons/copy.svg"), TranslationManager::trayCapture());
         connect(captureAction, &QAction::triggered, this, &EShotApp::onCaptureRequested);
+        QAction *windowCaptureAction = m_trayMenu->addAction(QIcon(":/icons/rectangle.svg"), TranslationManager::trayCaptureWindow());
+        connect(windowCaptureAction, &QAction::triggered, this, &EShotApp::onWindowCaptureRequested);
         QAction *settingsAction = m_trayMenu->addAction(QIcon(":/icons/gear.svg"), TranslationManager::traySettings());
         connect(settingsAction, &QAction::triggered, this, &EShotApp::onSettingsRequested);
         QAction *aboutAction = m_trayMenu->addAction(QIcon(":/icons/pen.svg"), TranslationManager::trayAbout());

@@ -16,6 +16,7 @@ public:
     ~AnnotationToolbar();
 
     void refreshTools();
+    void selectTool(int toolId);
 
 signals:
     void toolSelected(int toolId);

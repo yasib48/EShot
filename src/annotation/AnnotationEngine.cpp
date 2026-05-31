@@ -3,6 +3,7 @@
 #include <QPainterPath>
 #include <QImage>
 #include <QtMath>
+#include <climits>
 
 AnnotationEngine::AnnotationEngine(QObject *parent)
     : QObject(parent)
@@ -12,6 +13,7 @@ AnnotationEngine::AnnotationEngine(QObject *parent)
     , m_shiftHeld(false)
     , m_isDrawing(false)
     , m_counterValue(0)
+    , m_selectedIndex(-1)
 {
 }
 
@@ -179,6 +181,15 @@ void AnnotationEngine::drawAnnotation(QPainter *painter, const Annotation &ann, 
         painter->drawEllipse(r.normalized());
         break;
     }
+    case Line: {
+        if (ann.points.size() < 2) break;
+        QPoint start = ann.points.first() + offset;
+        QPoint end = ann.points.last() + offset;
+        QPen pen(ann.color, ann.penWidth);
+        painter->setPen(pen);
+        painter->drawLine(start, end);
+        break;
+    }
     case Highlighter: {
         QPen pen(ann.color, ann.penWidth * 5, Qt::SolidLine, Qt::FlatCap, Qt::BevelJoin);
         painter->setPen(pen);
@@ -282,6 +293,81 @@ void AnnotationEngine::addCounterAnnotation(const QPoint &pos)
     emit annotationAdded();
 }
 
+bool AnnotationEngine::eraseAnnotationAt(const QPoint &pos)
+{
+    for (int i = m_annotations.size() - 1; i >= 0; --i) {
+        const Annotation &ann = m_annotations[i];
+        if (ann.points.isEmpty()) continue;
+
+        QRect bounds;
+        if (ann.tool == Text || ann.tool == Counter) {
+            bounds = QRect(ann.points.first(), QSize(80, 30));
+            bounds.moveCenter(ann.points.first());
+        } else if (ann.points.size() == 1) {
+            bounds = QRect(ann.points.first(), QSize(10, 10));
+            bounds.moveCenter(ann.points.first());
+        } else {
+            bounds = QRect(ann.points.first(), ann.points.last()).normalized();
+            bounds.adjust(-5, -5, 5, 5);
+        }
+
+        if (bounds.contains(pos)) {
+            m_annotations.removeAt(i);
+            return true;
+        }
+    }
+    return false;
+}
+
+int AnnotationEngine::findAnnotationAt(const QPoint &pos)
+{
+    for (int i = m_annotations.size() - 1; i >= 0; --i) {
+        const Annotation &ann = m_annotations[i];
+        if (ann.points.isEmpty()) continue;
+
+        QRect bounds;
+        if (ann.tool == Text || ann.tool == Counter) {
+            bounds = QRect(ann.points.first(), QSize(100, 40));
+            bounds.moveCenter(ann.points.first());
+        } else if (ann.tool == Blur) {
+            bounds = QRect(ann.points.first(), ann.points.last()).normalized();
+            bounds.adjust(-10, -10, 10, 10);
+        } else if (ann.points.size() == 1) {
+            bounds = QRect(ann.points.first(), QSize(20, 20));
+            bounds.moveCenter(ann.points.first());
+        } else {
+            // Tüm noktaları kapsayan bounds hesapla
+            int minX = INT_MAX, minY = INT_MAX, maxX = INT_MIN, maxY = INT_MIN;
+            for (const QPoint &p : ann.points) {
+                minX = qMin(minX, p.x());
+                minY = qMin(minY, p.y());
+                maxX = qMax(maxX, p.x());
+                maxY = qMax(maxY, p.y());
+            }
+            bounds = QRect(minX, minY, maxX - minX, maxY - minY);
+            bounds.adjust(-10, -10, 10, 10);
+        }
+
+        if (bounds.contains(pos))
+            return i;
+    }
+    return -1;
+}
+
+void AnnotationEngine::moveAnnotation(int index, const QPoint &delta)
+{
+    if (index < 0 || index >= m_annotations.size()) return;
+    Annotation &ann = m_annotations[index];
+    for (int i = 0; i < ann.points.size(); ++i) {
+        ann.points[i] += delta;
+    }
+}
+
+void AnnotationEngine::setSelectedIndex(int index)
+{
+    m_selectedIndex = index;
+}
+
 void AnnotationEngine::setScreenSnapshot(const QPixmap &snapshot)
 {
     m_screenSnapshot = snapshot;
@@ -297,32 +383,45 @@ void AnnotationEngine::drawBlurEffect(QPainter *painter, const QRect &rect, cons
     QRect target = rect.translated(offset);
     painter->save();
 
-    if (!m_screenSnapshot.isNull()) {
-        // Hedef区域内ını ekran görüntüsünden al
-        // target painter koordinatlarındadır
-        // Canlı önizleme: painter koordinatları = ekran koordinatları
-        // Son yakalama: painter koordinatları = seçim-relatif koordinatlar
-        QRect sourceRect;
-        if (offset != QPoint(0, 0)) {
-            // Canlı önizleme: offset selRect.topLeft(), target zaten ekran koordinatlarında
-            sourceRect = target;
-        } else {
-            // Son yakalama: target seçim-relatif, ekran koordinatlarına çevir
-            sourceRect = target.translated(m_selectionRect.topLeft());
-        }
+    if (target.isEmpty()) {
+        painter->restore();
+        return;
+    }
 
+    // Final capture: painter bir QPixmap üzerine çiziyor
+    QPixmap *dev = dynamic_cast<QPixmap*>(painter->device());
+    if (dev) {
+        QRect clamped = target.intersected(dev->rect());
+        if (!clamped.isEmpty()) {
+            QPixmap region = dev->copy(clamped);
+            if (!region.isNull()) {
+                int ps = 16;
+                QImage img = region.toImage();
+                QImage scaled = img.scaled(qMax(1, img.width() / ps), qMax(1, img.height() / ps),
+                                           Qt::IgnoreAspectRatio, Qt::FastTransformation);
+                QImage mosaic = scaled.scaled(img.width(), img.height(),
+                                              Qt::IgnoreAspectRatio, Qt::FastTransformation);
+                painter->drawPixmap(clamped.topLeft(), QPixmap::fromImage(mosaic));
+                painter->restore();
+                return;
+            }
+        }
+    }
+
+    // Canlı önizleme: m_screenSnapshot'tan al
+    if (!m_screenSnapshot.isNull()) {
+        QRect sourceRect = target;
         QRect clamped = sourceRect.intersected(m_screenSnapshot.rect());
         if (!clamped.isEmpty()) {
             QPixmap region = m_screenSnapshot.copy(clamped);
             if (!region.isNull()) {
-                int ps = 16; // mozaik piksel boyutu
-                QPixmap pix = QPixmap::fromImage(
-                    region.toImage()
-                        .scaled(qMax(1, region.width() / ps), qMax(1, region.height() / ps),
-                                Qt::IgnoreAspectRatio, Qt::FastTransformation)
-                        .scaled(region.width(), region.height(),
-                                Qt::IgnoreAspectRatio, Qt::FastTransformation));
-                painter->drawPixmap(clamped.topLeft(), pix);
+                int ps = 16;
+                QImage img = region.toImage();
+                QImage scaled = img.scaled(qMax(1, img.width() / ps), qMax(1, img.height() / ps),
+                                           Qt::IgnoreAspectRatio, Qt::FastTransformation);
+                QImage mosaic = scaled.scaled(img.width(), img.height(),
+                                              Qt::IgnoreAspectRatio, Qt::FastTransformation);
+                painter->drawPixmap(clamped.topLeft(), QPixmap::fromImage(mosaic));
                 painter->restore();
                 return;
             }

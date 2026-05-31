@@ -23,7 +23,9 @@ public:
         Text,
         Blur,
         Highlighter,
-        Counter
+        Counter,
+        Eraser,
+        Line
     };
     Q_ENUM(Tool)
 
@@ -54,6 +56,13 @@ public:
 
     void addTextAnnotation(const QPoint &pos, const QString &text);
     void addCounterAnnotation(const QPoint &pos);
+    bool eraseAnnotationAt(const QPoint &pos);
+
+    // Annotation taşıma
+    int findAnnotationAt(const QPoint &pos);
+    void moveAnnotation(int index, const QPoint &delta);
+    void setSelectedIndex(int index);
+    int selectedIndex() const { return m_selectedIndex; }
 
     void setScreenSnapshot(const QPixmap &snapshot);
     void setSelectionRect(const QRect &rect);
@@ -87,6 +96,7 @@ private:
     Annotation m_currentAnnotation;
     bool m_isDrawing;
     int m_counterValue;
+    int m_selectedIndex;
     QPixmap m_screenSnapshot;
     QRect m_selectionRect;
 };

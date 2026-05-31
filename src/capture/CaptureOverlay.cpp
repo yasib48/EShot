@@ -21,6 +21,7 @@
 #include <QDebug>
 #include <QDir>
 #include <QPointer>
+#include <QRegularExpression>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -36,12 +37,33 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
     , m_captureDelayTimer(nullptr)
     , m_overlayOpacity(100)
     , m_crosshairStyle("dash")
+    , m_copyAfterCapture(false)
+    , m_closeAfterCopy(false)
     , m_resizeMode(ResNone)
+    , m_windowCaptureMode(false)
+    , m_isDraggingAnnotation(false)
 {
     setAttribute(Qt::WA_TranslucentBackground, false);
     setAttribute(Qt::WA_DeleteOnClose, false);
     setMouseTracking(true);
     setCursor(Qt::CrossCursor);
+
+    // Satır içi metin editörü
+    m_textEdit = new QLineEdit(this);
+    m_textEdit->setStyleSheet(R"(
+        QLineEdit {
+            background-color: rgba(0, 0, 0, 180);
+            color: white;
+            border: 2px solid #0078D4;
+            border-radius: 4px;
+            padding: 4px 8px;
+            font-size: 14px;
+            font-family: 'Segoe UI', Arial;
+        }
+    )");
+    m_textEdit->hide();
+    connect(m_textEdit, &QLineEdit::returnPressed, this, &CaptureOverlay::commitText);
+    connect(m_textEdit, &QLineEdit::editingFinished, this, &CaptureOverlay::cancelTextEdit);
 
     m_annotationEngine = new AnnotationEngine(this);
 
@@ -125,12 +147,21 @@ void CaptureOverlay::startCapture()
 
     m_overlayOpacity = s.value("overlayOpacity", 100).toInt();
     m_crosshairStyle = s.value("crosshairStyle", "dash").toString();
+    m_copyAfterCapture = s.value("copyAfterCapture", false).toBool();
+    m_closeAfterCopy = s.value("closeAfterCopy", true).toBool();
 
     int delayMs = s.value("captureDelay", 0).toInt();
     if (delayMs > 0)
         m_captureDelayTimer->start(delayMs);
     else
         performCapture();
+}
+
+void CaptureOverlay::startWindowCapture()
+{
+    m_windowCaptureMode = true;
+    m_hoveredWindowRect = QRect();
+    startCapture();
 }
 
 void CaptureOverlay::performCapture()
@@ -241,6 +272,19 @@ void CaptureOverlay::paintEvent(QPaintEvent *event)
     painter.drawPixmap(0, 0, width(), height(), m_screenSnapshot);
     painter.fillRect(rect(), QColor(0, 0, 0, m_overlayOpacity));
 
+    // Pencere yakalama modunda vurgulama
+    if (m_windowCaptureMode && !m_hoveredWindowRect.isEmpty()) {
+        // Vurgulanan pencerenin içini temizle
+        painter.setCompositionMode(QPainter::CompositionMode_Source);
+        painter.drawPixmap(m_hoveredWindowRect, m_screenSnapshot, m_hoveredWindowRect);
+        painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
+
+        // Mavi çerçeve
+        painter.setPen(QPen(QColor(0, 122, 204), 3));
+        painter.setBrush(Qt::NoBrush);
+        painter.drawRect(m_hoveredWindowRect);
+    }
+
     QRect selRect = normalizedSelectionRect();
 
     if (!selRect.isEmpty()) {
@@ -279,17 +323,19 @@ void CaptureOverlay::paintEvent(QPaintEvent *event)
         drawHandle(selRect.bottomLeft());
         drawHandle(selRect.bottomRight());
 
-        // Boyut bilgisi
-        if (m_isSelecting || m_selectionComplete) {
+        // Boyut bilgisi — cursor yakınında
+        if (m_isSelecting) {
             QString dim = QString("%1 x %2").arg(selRect.width()).arg(selRect.height());
             QFont f = painter.font(); f.setPointSize(10); f.setBold(true);
             painter.setFont(f);
             QFontMetrics fm(f);
             int tw = fm.horizontalAdvance(dim) + 16;
             int th = fm.height() + 8;
-            int lx = selRect.left();
-            int ly = selRect.top() - th - 4;
-            if (ly < 0) ly = selRect.top() + 4;
+            QPoint cur = mapFromGlobal(QCursor::pos());
+            int lx = cur.x() + 15;
+            int ly = cur.y() + 15;
+            if (lx + tw > width() - 5) lx = cur.x() - tw - 5;
+            if (ly + th > height() - 5) ly = cur.y() - th - 5;
 
             painter.setPen(Qt::NoPen);
             painter.setBrush(QColor(0,0,0,180));
@@ -323,6 +369,20 @@ void CaptureOverlay::mousePressEvent(QMouseEvent *event)
         if (m_actionPanel && m_actionPanel->isVisible() && m_actionPanel->geometry().contains(event->pos()))
             return;
 
+        // Pencere yakalama modunda pencereyi yakala
+        if (m_windowCaptureMode && !m_hoveredWindowRect.isEmpty()) {
+            m_selectionStart = m_hoveredWindowRect.topLeft();
+            m_selectionEnd = m_hoveredWindowRect.bottomRight();
+            m_isSelecting = false;
+            m_selectionComplete = true;
+            m_windowCaptureMode = false;
+            m_hoveredWindowRect = QRect();
+            if (m_annotationEngine) m_annotationEngine->clear();
+            showToolbar();
+            update();
+            return;
+        }
+
         if (m_selectionComplete) {
             QRect selRect = normalizedSelectionRect();
 
@@ -330,6 +390,20 @@ void CaptureOverlay::mousePressEvent(QMouseEvent *event)
             
             bool isDrawingTool = (m_annotationEngine && m_annotationEngine->currentTool() != AnnotationEngine::None);
             
+            // Araç seçili değilken annotation tıklama → taşıma modu
+            if (mode == ResNone && m_annotationEngine && selRect.contains(event->pos())) {
+                QPoint rel = event->pos() - selRect.topLeft();
+                int idx = m_annotationEngine->findAnnotationAt(rel);
+                if (idx >= 0) {
+                    m_isDraggingAnnotation = true;
+                    m_dragAnnotationStart = rel;
+                    m_annotationEngine->setSelectedIndex(idx);
+                    setCursor(Qt::SizeAllCursor);
+                    update();
+                    return;
+                }
+            }
+
             if (isDrawingTool && (mode == ResMove || mode == ResNewSelection)) {
                 if (selRect.contains(event->pos())) {
                      m_annotationEngine->beginDraw(event->pos() - selRect.topLeft());
@@ -385,6 +459,65 @@ void CaptureOverlay::mousePressEvent(QMouseEvent *event)
 
 void CaptureOverlay::mouseMoveEvent(QMouseEvent *event)
 {
+    // Pencere yakalama modunda pencere algılama
+    if (m_windowCaptureMode && !m_selectionComplete) {
+#ifdef Q_OS_WIN
+        POINT pt;
+        pt.x = event->globalPosition().toPoint().x();
+        pt.y = event->globalPosition().toPoint().y();
+
+        // Önce en üstteki pencereyi bul
+        HWND topHwnd = WindowFromPoint(pt);
+        if (topHwnd) {
+            // Overlay penceresini atla
+            HWND myHwnd = (HWND)winId();
+            HWND checkHwnd = topHwnd;
+            while (checkHwnd && checkHwnd != myHwnd) {
+                HWND parent = GetAncestor(checkHwnd, GA_ROOT);
+                if (parent == checkHwnd || parent == myHwnd) break;
+                checkHwnd = parent;
+            }
+            // Alt pencereyi bul (overlay olmayan)
+            HWND targetHwnd = topHwnd;
+            HWND iter = topHwnd;
+            while (iter) {
+                HWND root = GetAncestor(iter, GA_ROOT);
+                if (root && root != myHwnd) {
+                    targetHwnd = root;
+                    break;
+                }
+                iter = GetParent(iter);
+            }
+
+            if (targetHwnd != myHwnd) {
+                RECT winRect;
+                if (GetWindowRect(targetHwnd, &winRect)) {
+                    m_hoveredWindowRect = QRect(winRect.left, winRect.top,
+                        winRect.right - winRect.left, winRect.bottom - winRect.top);
+                    update();
+                    return;
+                }
+            }
+        }
+#endif
+        m_hoveredWindowRect = QRect();
+        update();
+        return;
+    }
+
+    // Annotation taşıma
+    if (m_isDraggingAnnotation && m_annotationEngine && m_annotationEngine->selectedIndex() >= 0) {
+        QRect selRect = normalizedSelectionRect();
+        QPoint rel = event->pos() - selRect.topLeft();
+        QPoint delta = rel - m_dragAnnotationStart;
+        if (!delta.isNull()) {
+            m_annotationEngine->moveAnnotation(m_annotationEngine->selectedIndex(), delta);
+            m_dragAnnotationStart = rel;
+            update();
+        }
+        return;
+    }
+
     if (m_resizeMode != ResNone && m_resizeMode != ResNewSelection) {
         QRect oldSel = normalizedSelectionRect();
         
@@ -417,7 +550,6 @@ void CaptureOverlay::mouseMoveEvent(QMouseEvent *event)
             m_selectionEnd = event->pos();
         }
 
-        showToolbar();
         update();
         return;
     }
@@ -429,8 +561,14 @@ void CaptureOverlay::mouseMoveEvent(QMouseEvent *event)
                m_annotationEngine->currentTool() != AnnotationEngine::None) {
         QRect selRect = normalizedSelectionRect();
         if (selRect.contains(event->pos())) {
-            m_annotationEngine->continueDraw(event->pos() - selRect.topLeft());
-            update();
+            QPoint rel = event->pos() - selRect.topLeft();
+            if (m_annotationEngine->currentTool() == AnnotationEngine::Eraser) {
+                if (m_annotationEngine->eraseAnnotationAt(rel))
+                    update();
+            } else {
+                m_annotationEngine->continueDraw(rel);
+                update();
+            }
         }
     } else if (!m_selectionComplete) {
         update(); // crosshair
@@ -442,9 +580,19 @@ void CaptureOverlay::mouseMoveEvent(QMouseEvent *event)
 void CaptureOverlay::mouseReleaseEvent(QMouseEvent *event)
 {
     if (event->button() == Qt::LeftButton) {
+        // Annotation taşıma sonlandır
+        if (m_isDraggingAnnotation) {
+            m_isDraggingAnnotation = false;
+            if (m_annotationEngine) m_annotationEngine->setSelectedIndex(-1);
+            setCursor(Qt::CrossCursor);
+            update();
+            return;
+        }
+
         if (m_resizeMode != ResNone && m_resizeMode != ResNewSelection) {
             m_resizeMode = ResNone;
             updateCursor(event->pos());
+            showToolbar();
             return;
         }
 
@@ -463,15 +611,21 @@ void CaptureOverlay::mouseReleaseEvent(QMouseEvent *event)
             rel.setX(qBound(0, rel.x(), selRect.width()));
             rel.setY(qBound(0, rel.y(), selRect.height()));
 
-            if (m_annotationEngine && m_annotationEngine->currentTool() == AnnotationEngine::Text) {
+            if (m_annotationEngine && m_annotationEngine->currentTool() == AnnotationEngine::Eraser) {
                 if (selRect.contains(event->pos())) {
-                    bool ok;
-                    QString text = QInputDialog::getText(this, TranslationManager::toolText(),
-                        TranslationManager::toolText() + ":", QLineEdit::Normal, "", &ok);
-                    if (ok && !text.isEmpty()) {
-                        m_annotationEngine->addTextAnnotation(rel, text);
+                    if (m_annotationEngine->eraseAnnotationAt(rel))
                         update();
-                    }
+                }
+            } else if (m_annotationEngine && m_annotationEngine->currentTool() == AnnotationEngine::Text) {
+                if (selRect.contains(event->pos())) {
+                    m_textEditPosition = event->pos();
+                    m_textEdit->setGeometry(event->pos().x() - selRect.left(),
+                                            event->pos().y() - selRect.top(),
+                                            200, 30);
+                    m_textEdit->clear();
+                    m_textEdit->show();
+                    m_textEdit->setFocus();
+                    m_textEdit->selectAll();
                 }
             } else if (m_annotationEngine && m_annotationEngine->currentTool() == AnnotationEngine::Counter) {
                 if (selRect.contains(event->pos())) {
@@ -514,6 +668,27 @@ void CaptureOverlay::keyPressEvent(QKeyEvent *event)
         if (m_annotationEngine) { m_annotationEngine->redo(); update(); }
     } else if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) {
         if (m_selectionComplete) onCopyToClipboard();
+    } else if (m_selectionComplete && m_annotationEngine) {
+        // Araç kısayol tuşları
+        int toolId = AnnotationEngine::None;
+        switch (event->key()) {
+            case Qt::Key_P: toolId = AnnotationEngine::Pen; break;
+            case Qt::Key_A: toolId = AnnotationEngine::Arrow; break;
+            case Qt::Key_R: toolId = AnnotationEngine::Rectangle; break;
+            case Qt::Key_C: toolId = AnnotationEngine::Circle; break;
+            case Qt::Key_T: toolId = AnnotationEngine::Text; break;
+            case Qt::Key_H: toolId = AnnotationEngine::Highlighter; break;
+            case Qt::Key_B: toolId = AnnotationEngine::Blur; break;
+            case Qt::Key_NumberSign: toolId = AnnotationEngine::Counter; break;
+            case Qt::Key_X: toolId = AnnotationEngine::Eraser; break;
+            case Qt::Key_L: toolId = AnnotationEngine::Line; break;
+            default: break;
+        }
+        if (toolId != AnnotationEngine::None) {
+            m_annotationEngine->setCurrentTool(static_cast<AnnotationEngine::Tool>(toolId));
+            // Toolbar'daki seçimi güncelle
+            if (m_toolbar) m_toolbar->selectTool(toolId);
+        }
     }
 }
 
@@ -551,9 +726,26 @@ QString CaptureOverlay::resolveFilenamePattern(const QString &pattern) const
     result.replace("%h", now.toString("HH"));
     result.replace("%m", now.toString("mm"));
     result.replace("%s", now.toString("ss"));
-    result.replace("%T", "");  // Pencere başlığı — opsiyonel, şimdilik boş
+    result.replace("%T", resolveWindowTitle());
 
     return result;
+}
+
+QString CaptureOverlay::resolveWindowTitle() const
+{
+#ifdef Q_OS_WIN
+    HWND hwnd = GetForegroundWindow();
+    if (hwnd) {
+        wchar_t title[256];
+        int len = GetWindowTextW(hwnd, title, 256);
+        if (len > 0) {
+            QString windowTitle = QString::fromWCharArray(title, len);
+            windowTitle.replace(QRegularExpression("[\\\\/:*?\"<>|]"), "_");
+            return windowTitle.left(50);
+        }
+    }
+#endif
+    return "";
 }
 
 void CaptureOverlay::showToolbar()
@@ -614,6 +806,13 @@ void CaptureOverlay::showToolbar()
         m_actionPanel->show();
         m_actionPanel->raise();
     }
+
+    // copyAfterCapture ayarı aktifse, seçimi panoya kopyala
+    if (m_copyAfterCapture) {
+        QPixmap result = getSelectedPixmap();
+        if (!result.isNull())
+            QGuiApplication::clipboard()->setPixmap(result);
+    }
 }
 
 void CaptureOverlay::hideToolbar()
@@ -628,6 +827,17 @@ void CaptureOverlay::finishCapture()
     hide();
     m_selectionComplete = false;
     m_isSelecting = false;
+
+    // Ses çal (ayar aktifse)
+    QSettings s("EShot", "EShot");
+    if (s.value("playSound", false).toBool()) {
+#ifdef Q_OS_WIN
+        MessageBeep(MB_OK);
+#else
+        QApplication::beep();
+#endif
+    }
+
     if (!result.isNull()) emit captureCompleted(result);
 }
 
@@ -639,6 +849,26 @@ void CaptureOverlay::cancelCapture()
     emit captureCancelled();
 }
 
+void CaptureOverlay::commitText()
+{
+    if (!m_textEdit || m_textEdit->isHidden()) return;
+    QString text = m_textEdit->text().trimmed();
+    if (!text.isEmpty() && m_annotationEngine) {
+        QRect selRect = normalizedSelectionRect();
+        QPoint rel = m_textEditPosition - selRect.topLeft();
+        m_annotationEngine->addTextAnnotation(rel, text);
+        update();
+    }
+    m_textEdit->hide();
+    setFocus();
+}
+
+void CaptureOverlay::cancelTextEdit()
+{
+    if (m_textEdit) m_textEdit->hide();
+    setFocus();
+}
+
 void CaptureOverlay::onClose() { cancelCapture(); }
 
 QRect CaptureOverlay::normalizedSelectionRect() const
@@ -648,8 +878,11 @@ QRect CaptureOverlay::normalizedSelectionRect() const
 
 void CaptureOverlay::onToolSelected(int toolId)
 {
-    if (m_annotationEngine)
+    if (m_annotationEngine) {
         m_annotationEngine->setCurrentTool(static_cast<AnnotationEngine::Tool>(toolId));
+        m_annotationEngine->setSelectedIndex(-1);
+    }
+    m_isDraggingAnnotation = false;
 }
 
 void CaptureOverlay::onCopyToClipboard()

@@ -26,7 +26,7 @@ AnnotationToolbar::AnnotationToolbar(QWidget *parent)
 
     QSettings s("EShot", "EShot");
     m_visibleTools = s.value("visibleTools",
-        QStringList{"Pen","Arrow","Rectangle","Circle","Text","Highlighter","Blur","Counter"})
+        QStringList{"Pen","Arrow","Rectangle","Circle","Text","Highlighter","Blur","Counter","Eraser","Line"})
         .toStringList();
 
     setupUI();
@@ -44,7 +44,7 @@ void AnnotationToolbar::refreshTools()
 {
     QSettings s("EShot", "EShot");
     m_visibleTools = s.value("visibleTools",
-        QStringList{"Pen","Arrow","Rectangle","Circle","Text","Highlighter","Blur","Counter"})
+        QStringList{"Pen","Arrow","Rectangle","Circle","Text","Highlighter","Blur","Counter","Eraser","Line"})
         .toStringList();
 
     for (auto btn : m_toolButtons) {
@@ -54,6 +54,17 @@ void AnnotationToolbar::refreshTools()
         }
     }
     adjustSize();
+}
+
+void AnnotationToolbar::selectTool(int toolId)
+{
+    for (auto it = m_toolButtons.begin(); it != m_toolButtons.end(); ++it) {
+        bool sel = (it.key() == toolId);
+        it.value()->setProperty("selected", sel ? "true" : "false");
+        it.value()->style()->unpolish(it.value());
+        it.value()->style()->polish(it.value());
+    }
+    m_currentToolId = toolId;
 }
 
 QWidget* AnnotationToolbar::createSeparator()
@@ -74,12 +85,14 @@ void AnnotationToolbar::setupUI()
 
     m_layout->addWidget(createToolButton(":/icons/pen.svg", TranslationManager::toolPen(), AnnotationEngine::Pen, "Pen"));
     m_layout->addWidget(createToolButton(":/icons/arrow.svg", TranslationManager::toolArrow(), AnnotationEngine::Arrow, "Arrow"));
+    m_layout->addWidget(createToolButton(":/icons/line.svg", TranslationManager::toolLine(), AnnotationEngine::Line, "Line"));
     m_layout->addWidget(createToolButton(":/icons/rectangle.svg", TranslationManager::toolRect(), AnnotationEngine::Rectangle, "Rectangle"));
     m_layout->addWidget(createToolButton(":/icons/circle.svg", TranslationManager::toolCircle(), AnnotationEngine::Circle, "Circle"));
     m_layout->addWidget(createToolButton(":/icons/text.svg", TranslationManager::toolText(), AnnotationEngine::Text, "Text"));
     m_layout->addWidget(createToolButton(":/icons/highlighter.svg", TranslationManager::toolHighlighter(), AnnotationEngine::Highlighter, "Highlighter"));
     m_layout->addWidget(createToolButton(":/icons/blur.svg", TranslationManager::toolBlur(), AnnotationEngine::Blur, "Blur"));
     m_layout->addWidget(createToolButton(":/icons/counter.svg", TranslationManager::toolCounter(), AnnotationEngine::Counter, "Counter"));
+    m_layout->addWidget(createToolButton(":/icons/eraser.svg", TranslationManager::toolEraser(), AnnotationEngine::Eraser, "Eraser"));
 
     refreshTools();
 

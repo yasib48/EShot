@@ -16,5 +16,7 @@
         <file alias="icons/counter.svg">../icons/counter.svg</file>
         <file alias="icons/pin.svg">../icons/pin.svg</file>
         <file alias="icons/gear.svg">../icons/gear.svg</file>
+        <file alias="icons/eraser.svg">../icons/eraser.svg</file>
+        <file alias="icons/line.svg">../icons/line.svg</file>
     </qresource>
 </RCC>

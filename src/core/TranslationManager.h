@@ -114,6 +114,7 @@ public:
 
     // ─── Tray ───
     static QString trayCapture()      { return m_lang == Turkish ? "Yakala" : "Capture"; }
+    static QString trayCaptureWindow(){ return m_lang == Turkish ? "Pencere Yakala" : "Capture Window"; }
     static QString traySettings()     { return m_lang == Turkish ? "Ayarlar" : "Settings"; }
     static QString trayAbout()        { return m_lang == Turkish ? "Hakkında" : "About"; }
     static QString trayQuit()         { return m_lang == Turkish ? "Çıkış" : "Quit"; }
@@ -127,6 +128,8 @@ public:
     static QString toolHighlighter()  { return m_lang == Turkish ? "Vurgulayıcı (H)" : "Highlighter (H)"; }
     static QString toolBlur()         { return m_lang == Turkish ? "Bulanıklaştır (B)" : "Blur (B)"; }
     static QString toolCounter()      { return m_lang == Turkish ? "Numara (#)" : "Counter (#)"; }
+    static QString toolEraser()       { return m_lang == Turkish ? "Silgi (X)" : "Eraser (X)"; }
+    static QString toolLine()         { return m_lang == Turkish ? "Çizgi (L)" : "Line (L)"; }
     static QString toolColor()        { return m_lang == Turkish ? "Renk Seç" : "Pick Color"; }
     static QString toolWidth()        { return m_lang == Turkish ? "Çizgi Kalınlığı" : "Pen Width"; }
     static QString toolUndo()         { return m_lang == Turkish ? "Geri Al (Ctrl+Z)" : "Undo (Ctrl+Z)"; }
@@ -145,6 +148,8 @@ public:
     static QString toolListHighlight(){ return m_lang == Turkish ? "🖍️ Vurgulayıcı" : "🖍️ Highlighter"; }
     static QString toolListBlur()     { return m_lang == Turkish ? "🔲 Bulanıklaştır" : "🔲 Blur"; }
     static QString toolListCounter()  { return m_lang == Turkish ? "🔢 Numara Sayacı" : "🔢 Counter"; }
+    static QString toolListEraser()   { return m_lang == Turkish ? "🧹 Silgi" : "🧹 Eraser"; }
+    static QString toolListLine()     { return m_lang == Turkish ? "📏 Çizgi" : "📏 Line"; }
 
     // ─── Pinned ───
     static QString pinnedLabel()      { return m_lang == Turkish ? "Sabitlendi" : "Pinned"; }

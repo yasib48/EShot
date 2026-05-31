@@ -7,6 +7,7 @@
 #include <QRect>
 #include <QTimer>
 #include <QList>
+#include <QLineEdit>
 
 class AnnotationToolbar;
 class AnnotationEngine;
@@ -19,6 +20,7 @@ public:
     explicit CaptureOverlay(QWidget *parent = nullptr);
     ~CaptureOverlay();
     void startCapture();
+    void startWindowCapture();
 
 signals:
     void captureCompleted(const QPixmap &pixmap);
@@ -43,6 +45,7 @@ private:
 
     // Dosya adı şablonu parse
     QString resolveFilenamePattern(const QString &pattern) const;
+    QString resolveWindowTitle() const;
 
     QPixmap m_screenSnapshot;
     QPoint m_selectionStart;
@@ -57,11 +60,25 @@ private:
     QWidget *m_actionPanel;
     AnnotationEngine *m_annotationEngine;
 
+    // Satır içi metin düzenleme
+    QLineEdit *m_textEdit;
+    QPoint m_textEditPosition;
+    void commitText();
+    void cancelTextEdit();
+
     // Boyutlandırma ve Taşıma
     enum ResizeMode { ResNone, ResTopLeft, ResTopRight, ResBottomRight, ResBottomLeft, ResMove, ResNewSelection };
     ResizeMode m_resizeMode;
     ResizeMode getResizeMode(const QPoint &pos);
     void updateCursor(const QPoint &pos);
+
+    // Pencere yakalama modu
+    bool m_windowCaptureMode;
+    QRect m_hoveredWindowRect;
+
+    // Annotation taşıma
+    bool m_isDraggingAnnotation;
+    QPoint m_dragAnnotationStart;
 
     QTimer *m_captureDelayTimer;
 
@@ -70,6 +87,10 @@ private:
 
     // Crosshair stili
     QString m_crosshairStyle;
+
+    // Ayarlar
+    bool m_copyAfterCapture;
+    bool m_closeAfterCopy;
 
     // Pinned pencereler listesi (ömür yönetimi için)
     QList<QPointer<QWidget>> m_pinnedWindows;

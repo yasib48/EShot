@@ -351,6 +351,8 @@ QWidget* SettingsDialog::createInterfaceTab()
         {"Highlighter", TranslationManager::toolListHighlight()},
         {"Blur",        TranslationManager::toolListBlur()},
         {"Counter",     TranslationManager::toolListCounter()},
+        {"Eraser",      TranslationManager::toolListEraser()},
+        {"Line",        TranslationManager::toolListLine()},
     };
 
     for (const auto &t : tools) {

@@ -17,6 +17,7 @@
 #include <QFileInfo>
 #include <QTimer>
 #include <QPainter>
+#include <QUrlQuery>
 
 #include "core/HotkeyManager.h"
 #include "core/TranslationManager.h"
@@ -206,6 +207,9 @@ private:
                         setTrayIconUpdate();
                     } else {
                         qDebug() << "[EShot] Already up to date";
+                        m_updateAvailable = false;
+                        m_latestVersion.clear();
+                        setTrayIconNormal();
                     }
                 }
             } else {
@@ -214,7 +218,11 @@ private:
             reply->deleteLater();
             mgr->deleteLater();
         });
-        mgr->get(QNetworkRequest(QUrl("https://api.github.com/repos/Benoks/EShot/releases/latest")));
+        QUrl url("https://api.github.com/repos/Benoks/EShot/releases/latest");
+        QUrlQuery query;
+        query.addQueryItem("_t", QString::number(QDateTime::currentMSecsSinceEpoch()));
+        url.setQuery(query);
+        mgr->get(QNetworkRequest(url));
     }
 
     void setTrayIconUpdate()

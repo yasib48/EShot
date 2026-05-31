@@ -16,6 +16,7 @@ public:
     ~AnnotationToolbar();
 
     void refreshTools();
+    void refreshToolTips();
     void selectTool(int toolId);
 
 signals:
@@ -45,6 +46,7 @@ private:
 
     QHBoxLayout *m_layout;
     QMap<int, QPushButton*> m_toolButtons;
+    QMap<QString, QPushButton*> m_actionButtons;
     QPushButton *m_colorButton;
     int m_currentToolId;
     QColor m_currentColor;

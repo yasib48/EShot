@@ -132,6 +132,26 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
 
 CaptureOverlay::~CaptureOverlay() {}
 
+void CaptureOverlay::refreshUI()
+{
+    // Toolbar buton tooltip'lerini güncelle
+    if (m_toolbar) m_toolbar->refreshToolTips();
+
+    // Action panel buton tooltip'lerini güncelle
+    if (m_actionPanel) {
+        QList<QPushButton*> buttons = m_actionPanel->findChildren<QPushButton*>();
+        QStringList tips = {
+            TranslationManager::actionPin(),
+            TranslationManager::actionCopy(),
+            TranslationManager::actionSave(),
+            TranslationManager::actionClose()
+        };
+        for (int i = 0; i < qMin(buttons.size(), tips.size()); ++i) {
+            buttons[i]->setToolTip(tips[i]);
+        }
+    }
+}
+
 void CaptureOverlay::startCapture()
 {
     m_isSelecting = false;

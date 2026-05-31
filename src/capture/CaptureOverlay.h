@@ -21,6 +21,7 @@ public:
     explicit CaptureOverlay(QWidget *parent = nullptr);
     ~CaptureOverlay();
     void startCapture();
+    void refreshUI();
 
 signals:
     void captureCompleted(const QPixmap &pixmap);

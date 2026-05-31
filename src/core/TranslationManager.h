@@ -26,6 +26,7 @@ public:
                 case QLocale::Chinese:  m_lang = Chinese; break;
                 default: m_lang = English; break;
             }
+            s.setValue("language", static_cast<int>(m_lang));
         }
     }
 

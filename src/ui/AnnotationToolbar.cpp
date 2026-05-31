@@ -190,6 +190,7 @@ QPushButton* AnnotationToolbar::createActionButton(const QString &iconPath, cons
     )").arg(bg, hv));
 
     connect(btn, &QPushButton::clicked, this, &AnnotationToolbar::onActionButtonClicked);
+    m_actionButtons[action] = btn;
     return btn;
 }
 
@@ -254,3 +255,27 @@ void AnnotationToolbar::onColorButtonClicked()
 }
 
 void AnnotationToolbar::onWidthSliderChanged(int value) { emit penWidthChanged(value); }
+
+void AnnotationToolbar::refreshToolTips()
+{
+    // Araç butonları
+    for (auto it = m_toolButtons.begin(); it != m_toolButtons.end(); ++it) {
+        int id = it.key();
+        switch (id) {
+            case AnnotationEngine::Pen:        it.value()->setToolTip(TranslationManager::toolPen()); break;
+            case AnnotationEngine::Arrow:      it.value()->setToolTip(TranslationManager::toolArrow()); break;
+            case AnnotationEngine::Line:       it.value()->setToolTip(TranslationManager::toolLine()); break;
+            case AnnotationEngine::Rectangle:  it.value()->setToolTip(TranslationManager::toolRect()); break;
+            case AnnotationEngine::Circle:     it.value()->setToolTip(TranslationManager::toolCircle()); break;
+            case AnnotationEngine::Text:       it.value()->setToolTip(TranslationManager::toolText()); break;
+            case AnnotationEngine::Highlighter:it.value()->setToolTip(TranslationManager::toolHighlighter()); break;
+            case AnnotationEngine::Blur:       it.value()->setToolTip(TranslationManager::toolBlur()); break;
+            case AnnotationEngine::Counter:    it.value()->setToolTip(TranslationManager::toolCounter()); break;
+            case AnnotationEngine::Eraser:     it.value()->setToolTip(TranslationManager::toolEraser()); break;
+        }
+    }
+    // Aksiyon butonları
+    if (m_actionButtons.contains("undo")) m_actionButtons["undo"]->setToolTip(TranslationManager::toolUndo());
+    if (m_actionButtons.contains("redo")) m_actionButtons["redo"]->setToolTip(TranslationManager::toolRedo());
+    m_colorButton->setToolTip(TranslationManager::toolColor());
+}

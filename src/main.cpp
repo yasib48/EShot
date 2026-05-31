@@ -81,6 +81,7 @@ public slots:
         if (dlg.exec() == QDialog::Accepted) {
             loadSettings();
             rebuildTrayMenu();
+            if (m_overlay) m_overlay->refreshUI();
         }
     }
 
@@ -191,13 +192,17 @@ private:
                 QJsonDocument doc = QJsonDocument::fromJson(data);
                 if (doc.isObject()) {
                     QJsonObject obj = doc.object();
-                    QString latestVersion = obj["tag_name"].toString();
+                    QString latestTag = obj["tag_name"].toString();
+                    // "v2.1.1" → "2.1.1" (v prefix'ini kaldır)
+                    if (latestTag.startsWith("v") || latestTag.startsWith("V"))
+                        latestTag = latestTag.mid(1);
                     QString currentVersion = QCoreApplication::applicationVersion();
-                    if (!latestVersion.isEmpty() && latestVersion != currentVersion) {
+                    if (!latestTag.isEmpty() && latestTag != currentVersion) {
+                        qDebug() << "[EShot] Update available:" << latestTag << "(current:" << currentVersion << ")";
                         if (m_trayIcon && m_showNotifications) {
                             m_trayIcon->showMessage(
                                 TranslationManager::updateTitle(),
-                                TranslationManager::updateMessage(latestVersion),
+                                TranslationManager::updateMessage(latestTag),
                                 QSystemTrayIcon::Information, 5000);
                         }
                     }
@@ -206,7 +211,7 @@ private:
             reply->deleteLater();
             mgr->deleteLater();
         });
-        mgr->get(QNetworkRequest(QUrl("https://api.github.com/repos/emirh/EShot/releases/latest")));
+        mgr->get(QNetworkRequest(QUrl("https://api.github.com/repos/Benoks/EShot/releases/latest")));
     }
 
     QSystemTrayIcon *m_trayIcon = nullptr;
@@ -228,7 +233,7 @@ int main(int argc, char *argv[])
 
     QApplication app(argc, argv);
     app.setApplicationName("EShot");
-    app.setApplicationVersion("2.1.0");
+    app.setApplicationVersion("2.1.1");
     app.setOrganizationName("EShot");
     app.setQuitOnLastWindowClosed(false);
     app.setStyle("Fusion");

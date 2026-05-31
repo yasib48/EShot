@@ -13,15 +13,19 @@ HotkeyManager::HotkeyManager(QObject *parent) : QObject(parent)
 {
     qApp->installNativeEventFilter(this);
 
-    // QSettings'ten kısayol tuşunu oku, varsayılan: PrtSc (modifier=0, vkey=VK_SNAPSHOT)
     QSettings s("EShot", "EShot");
     UINT modifiers = static_cast<UINT>(s.value("hotkeyModifiers", 0).toUInt());
     UINT vkey      = static_cast<UINT>(s.value("hotkeyVKey", VK_SNAPSHOT).toUInt());
 
-    if (registerHotkey(HOTKEY_CAPTURE, modifiers, vkey))
+    if (registerHotkey(HOTKEY_CAPTURE, modifiers, vkey)) {
         qDebug() << "[HotkeyManager] Capture hotkey registered (mod=" << modifiers << " vk=" << vkey << ")";
-    else
-        qWarning() << "[HotkeyManager] Failed to register hotkey. Error:" << GetLastError();
+    } else {
+        qWarning() << "[HotkeyManager] Failed to register hotkey (mod=" << modifiers << " vk=" << vkey << "). Trying default...";
+        // Varsayılan PrtSc ile de deneme
+        if (!registerHotkey(HOTKEY_CAPTURE, 0, VK_SNAPSHOT)) {
+            qWarning() << "[HotkeyManager] Default hotkey also failed. User must change hotkey in settings.";
+        }
+    }
 }
 
 HotkeyManager::~HotkeyManager()

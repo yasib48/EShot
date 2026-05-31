@@ -193,20 +193,24 @@ private:
                 if (doc.isObject()) {
                     QJsonObject obj = doc.object();
                     QString latestTag = obj["tag_name"].toString();
-                    // "v2.1.1" → "2.1.1" (v prefix'ini kaldır)
                     if (latestTag.startsWith("v") || latestTag.startsWith("V"))
                         latestTag = latestTag.mid(1);
                     QString currentVersion = QCoreApplication::applicationVersion();
+                    qDebug() << "[EShot] Update check: current=" << currentVersion << "latest=" << latestTag;
                     if (!latestTag.isEmpty() && latestTag != currentVersion) {
-                        qDebug() << "[EShot] Update available:" << latestTag << "(current:" << currentVersion << ")";
+                        qDebug() << "[EShot] Update available:" << latestTag;
                         if (m_trayIcon && m_showNotifications) {
                             m_trayIcon->showMessage(
                                 TranslationManager::updateTitle(),
                                 TranslationManager::updateMessage(latestTag),
-                                QSystemTrayIcon::Information, 5000);
+                                QSystemTrayIcon::Information, 8000);
                         }
+                    } else {
+                        qDebug() << "[EShot] Already up to date";
                     }
                 }
+            } else {
+                qDebug() << "[EShot] Update check failed:" << reply->errorString() << reply->error();
             }
             reply->deleteLater();
             mgr->deleteLater();
@@ -233,7 +237,7 @@ int main(int argc, char *argv[])
 
     QApplication app(argc, argv);
     app.setApplicationName("EShot");
-    app.setApplicationVersion("2.1.2");
+    app.setApplicationVersion("2.1.3");
     app.setOrganizationName("EShot");
     app.setQuitOnLastWindowClosed(false);
     app.setStyle("Fusion");

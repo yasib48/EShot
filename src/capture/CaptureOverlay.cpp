@@ -41,6 +41,7 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
     , m_resizeMode(ResNone)
     , m_foregroundHwnd(nullptr)
     , m_isDraggingAnnotation(false)
+    , m_textJustCommitted(false)
 {
     setAttribute(Qt::WA_TranslucentBackground, false);
     setAttribute(Qt::WA_DeleteOnClose, false);
@@ -171,6 +172,8 @@ void CaptureOverlay::startCapture()
     m_selectionStart = QPoint();
     m_selectionEnd = QPoint();
 
+    if (m_textEdit) m_textEdit->hide();
+    m_textJustCommitted = false;
     if (m_annotationEngine) m_annotationEngine->clear();
     hideToolbar();
 
@@ -583,9 +586,8 @@ void CaptureOverlay::mouseReleaseEvent(QMouseEvent *event)
             } else if (m_annotationEngine && m_annotationEngine->currentTool() == AnnotationEngine::Text) {
                 if (selRect.contains(event->pos())) {
                     m_textEditPosition = event->pos();
-                    m_textEdit->setGeometry(event->pos().x() - selRect.left(),
-                                            event->pos().y() - selRect.top(),
-                                            200, 30);
+                    // QLineEdit overlay'in çocuğu, overlay koordinatlarını kullan
+                    m_textEdit->setGeometry(event->pos().x(), event->pos().y(), 200, 30);
                     m_textEdit->clear();
                     m_textEdit->show();
                     m_textEdit->setFocus();
@@ -612,6 +614,13 @@ void CaptureOverlay::keyPressEvent(QKeyEvent *event)
     }
 
     if (event->key() == Qt::Key_Escape) {
+        // Text edit açıksa sadece onu kapat
+        if (m_textEdit && m_textEdit->isVisible()) {
+            m_textEdit->hide();
+            m_textJustCommitted = false;
+            setFocus();
+            return;
+        }
         if (m_selectionComplete) {
             m_selectionComplete = false;
             m_isSelecting = false;
@@ -631,6 +640,11 @@ void CaptureOverlay::keyPressEvent(QKeyEvent *event)
     } else if (event->matches(QKeySequence::Redo)) {
         if (m_annotationEngine) { m_annotationEngine->redo(); update(); }
     } else if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) {
+        // Text edit kapatıldıysa Enter'ı yut
+        if (m_textJustCommitted) {
+            m_textJustCommitted = false;
+            return;
+        }
         if (m_selectionComplete) onCopyToClipboard();
     } else if (m_selectionComplete && m_annotationEngine) {
         // Araç kısayol tuşları
@@ -818,6 +832,7 @@ void CaptureOverlay::commitText()
         update();
     }
     m_textEdit->hide();
+    m_textJustCommitted = true;
     setFocus();
 }
 

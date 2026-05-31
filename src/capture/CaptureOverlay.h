@@ -78,6 +78,9 @@ private:
     bool m_isDraggingAnnotation;
     QPoint m_dragAnnotationStart;
 
+    // Text onaylama flag'i
+    bool m_textJustCommitted;
+
     // Aktif pencere başlığı (%T için)
     HWND m_foregroundHwnd;
 

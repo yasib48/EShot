@@ -15,6 +15,9 @@
 #include <QDateTime>
 #include <QListWidgetItem>
 #include <QKeySequenceEdit>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -191,6 +194,12 @@ QWidget* SettingsDialog::createGeneralTab()
     m_langCombo = new QComboBox();
     m_langCombo->addItem(TranslationManager::langTurkish(), "tr");
     m_langCombo->addItem(TranslationManager::langEnglish(), "en");
+    m_langCombo->addItem(TranslationManager::langGerman(), "de");
+    m_langCombo->addItem(TranslationManager::langFrench(), "fr");
+    m_langCombo->addItem(TranslationManager::langSpanish(), "es");
+    m_langCombo->addItem(TranslationManager::langJapanese(), "ja");
+    m_langCombo->addItem(TranslationManager::langChinese(), "zh");
+    m_langCombo->setToolTip(TranslationManager::tipLanguage());
     langLayout->addWidget(m_langCombo);
     langLayout->addStretch();
     layout->addWidget(langGroup);
@@ -200,6 +209,7 @@ QWidget* SettingsDialog::createGeneralTab()
     QHBoxLayout *pathLayout = new QHBoxLayout(pathGroup);
     m_savePathEdit = new QLineEdit();
     m_savePathEdit->setPlaceholderText(TranslationManager::saveDirDesc());
+    m_savePathEdit->setToolTip(TranslationManager::tipSaveDir());
     QPushButton *browseBtn = new QPushButton(TranslationManager::browse());
     connect(browseBtn, &QPushButton::clicked, this, &SettingsDialog::onBrowse);
     pathLayout->addWidget(m_savePathEdit);
@@ -229,11 +239,45 @@ QWidget* SettingsDialog::createGeneralTab()
     m_showNotificationsCheck = new QCheckBox(TranslationManager::showNotifications());
     m_playSoundCheck         = new QCheckBox(TranslationManager::playSound());
     m_copyPathAfterSaveCheck = new QCheckBox(TranslationManager::copyPathAfterSave());
+    m_autoStartCheck->setToolTip(TranslationManager::tipAutoStart());
+    m_showNotificationsCheck->setToolTip(TranslationManager::tipNotifications());
+    m_playSoundCheck->setToolTip(TranslationManager::tipPlaySound());
+    m_copyPathAfterSaveCheck->setToolTip(TranslationManager::tipCopyPath());
     genLayout->addWidget(m_autoStartCheck);
     genLayout->addWidget(m_showNotificationsCheck);
     genLayout->addWidget(m_playSoundCheck);
     genLayout->addWidget(m_copyPathAfterSaveCheck);
     layout->addWidget(genGroup);
+
+    // Erişilebilirlik
+    QGroupBox *accessGroup = new QGroupBox(TranslationManager::accessibility());
+    QVBoxLayout *accessLayout = new QVBoxLayout(accessGroup);
+    m_highContrastCheck = new QCheckBox(TranslationManager::highContrast());
+    m_highContrastCheck->setToolTip(TranslationManager::tipHighContrast());
+    accessLayout->addWidget(m_highContrastCheck);
+    layout->addWidget(accessGroup);
+
+    // Tepsi simgesi
+    QGroupBox *trayGroup = new QGroupBox(TranslationManager::trayIcon());
+    QVBoxLayout *trayLayout = new QVBoxLayout(trayGroup);
+    m_trayIconCombo = new QComboBox();
+    m_trayIconCombo->addItem(TranslationManager::trayIconDark(), "dark");
+    m_trayIconCombo->addItem(TranslationManager::trayIconLight(), "light");
+    m_trayIconCombo->setToolTip(TranslationManager::tipTrayIcon());
+    trayLayout->addWidget(m_trayIconCombo);
+    layout->addWidget(trayGroup);
+
+    // Ayarları dışa/içe aktar
+    QGroupBox *impExpGroup = new QGroupBox(TranslationManager::settingsExportImport());
+    QHBoxLayout *impExpLayout = new QHBoxLayout(impExpGroup);
+    QPushButton *exportBtn = new QPushButton(TranslationManager::exportSettings());
+    connect(exportBtn, &QPushButton::clicked, this, &SettingsDialog::onExportSettings);
+    QPushButton *importBtn = new QPushButton(TranslationManager::importSettings());
+    connect(importBtn, &QPushButton::clicked, this, &SettingsDialog::onImportSettings);
+    impExpLayout->addWidget(exportBtn);
+    impExpLayout->addWidget(importBtn);
+    impExpLayout->addStretch();
+    layout->addWidget(impExpGroup);
 
     layout->addStretch();
     return tab;
@@ -297,6 +341,7 @@ QWidget* SettingsDialog::createAppearanceTab()
     QGroupBox *themeGroup = new QGroupBox(TranslationManager::theme());
     QVBoxLayout *themeLayout = new QVBoxLayout(themeGroup);
     m_darkModeCheck = new QCheckBox(TranslationManager::darkMode());
+    connect(m_darkModeCheck, &QCheckBox::toggled, this, &SettingsDialog::onThemeChanged);
     themeLayout->addWidget(m_darkModeCheck);
     layout->addWidget(themeGroup);
 
@@ -306,7 +351,7 @@ QWidget* SettingsDialog::createAppearanceTab()
     m_opacitySlider = new QSlider(Qt::Horizontal);
     m_opacitySlider->setRange(0, 255);
     m_opacitySlider->setTickInterval(25);
-    m_opacityValueLabel = new QLabel("39%");
+    m_opacityValueLabel = new QLabel("0%");
     m_opacityValueLabel->setFixedWidth(40);
     connect(m_opacitySlider, &QSlider::valueChanged, [this](int val) {
         int pct = qRound(val * 100.0 / 255.0);
@@ -472,6 +517,11 @@ void SettingsDialog::loadSettings()
     int ci = m_crosshairStyleCombo->findData(cross);
     if (ci >= 0) m_crosshairStyleCombo->setCurrentIndex(ci);
 
+    m_highContrastCheck->setChecked(m_settings->value("highContrast", false).toBool());
+    QString trayIcon = m_settings->value("trayIconStyle", "dark").toString();
+    int ti = m_trayIconCombo->findData(trayIcon);
+    if (ti >= 0) m_trayIconCombo->setCurrentIndex(ti);
+
     QStringList visibleTools = m_settings->value("visibleTools",
         QStringList{"Pen","Arrow","Rectangle","Circle","Text","Highlighter","Blur","Counter"})
         .toStringList();
@@ -550,9 +600,16 @@ void SettingsDialog::onSave()
 
     // Dil kaydet
     QString newLang = m_langCombo->currentData().toString();
-    TranslationManager::setLanguage(newLang == "tr" ? TranslationManager::Turkish : TranslationManager::English);
+    TranslationManager::Language lang = TranslationManager::English;
+    if (newLang == "tr") lang = TranslationManager::Turkish;
+    else if (newLang == "de") lang = TranslationManager::German;
+    else if (newLang == "fr") lang = TranslationManager::French;
+    else if (newLang == "es") lang = TranslationManager::Spanish;
+    else if (newLang == "ja") lang = TranslationManager::Japanese;
+    else if (newLang == "zh") lang = TranslationManager::Chinese;
+    TranslationManager::setLanguage(lang);
 
-    m_settings->setValue("language",          newLang);
+    m_settings->setValue("language",          static_cast<int>(lang));
     m_settings->setValue("savePath",          savePath);
     m_settings->setValue("filenamePattern",    m_filenamePatternEdit->text());
     m_settings->setValue("autoStart",          m_autoStartCheck->isChecked());
@@ -569,6 +626,8 @@ void SettingsDialog::onSave()
     m_settings->setValue("darkMode",           m_darkModeCheck->isChecked());
     m_settings->setValue("overlayOpacity",     m_opacitySlider->value());
     m_settings->setValue("crosshairStyle",     m_crosshairStyleCombo->currentData().toString());
+    m_settings->setValue("highContrast",       m_highContrastCheck->isChecked());
+    m_settings->setValue("trayIconStyle",      m_trayIconCombo->currentData().toString());
 
     QStringList visibleTools;
     for (int i = 0; i < m_toolVisibilityList->count(); ++i) {
@@ -607,4 +666,178 @@ void SettingsDialog::onReset()
         TranslationManager::init();
         loadSettings();
     }
+}
+
+void SettingsDialog::onExportSettings()
+{
+    QString path = QFileDialog::getSaveFileName(this, TranslationManager::exportSettings(),
+        QStandardPaths::writableLocation(QStandardPaths::DesktopLocation) + "/EShot_Settings.json",
+        "JSON (*.json)");
+    if (path.isEmpty()) return;
+
+    QJsonObject obj;
+    obj["language"] = m_langCombo->currentData().toString();
+    obj["savePath"] = m_savePathEdit->text();
+    obj["filenamePattern"] = m_filenamePatternEdit->text();
+    obj["autoStart"] = m_autoStartCheck->isChecked();
+    obj["showNotifications"] = m_showNotificationsCheck->isChecked();
+    obj["playSound"] = m_playSoundCheck->isChecked();
+    obj["copyPathAfterSave"] = m_copyPathAfterSaveCheck->isChecked();
+    obj["imageFormat"] = m_formatCombo->currentData().toString();
+    obj["imageQuality"] = m_qualitySpin->value();
+    obj["captureDelay"] = m_delaySpin->value();
+    obj["copyAfterCapture"] = m_copyAfterCaptureCheck->isChecked();
+    obj["closeAfterCopy"] = m_closeAfterCopyCheck->isChecked();
+    obj["darkMode"] = m_darkModeCheck->isChecked();
+    obj["overlayOpacity"] = m_opacitySlider->value();
+    obj["crosshairStyle"] = m_crosshairStyleCombo->currentData().toString();
+    obj["highContrast"] = m_highContrastCheck->isChecked();
+    obj["trayIconStyle"] = m_trayIconCombo->currentData().toString();
+
+    QJsonArray tools;
+    for (int i = 0; i < m_toolVisibilityList->count(); ++i) {
+        QListWidgetItem *item = m_toolVisibilityList->item(i);
+        if (item->checkState() == Qt::Checked)
+            tools.append(item->data(Qt::UserRole).toString());
+    }
+    obj["visibleTools"] = tools;
+
+    QKeySequence seq = m_hotkeyEdit->keySequence();
+    UINT mod = 0, vk = 0;
+    if (!seq.isEmpty() && keySequenceToWin32(seq, mod, vk)) {
+        obj["hotkeyModifiers"] = static_cast<int>(mod);
+        obj["hotkeyVKey"] = static_cast<int>(vk);
+    }
+
+    QFile file(path);
+    if (file.open(QIODevice::WriteOnly)) {
+        file.write(QJsonDocument(obj).toJson());
+        file.close();
+        QMessageBox::information(this, TranslationManager::exportSettings(), TranslationManager::exportSuccess());
+    }
+}
+
+void SettingsDialog::onImportSettings()
+{
+    QString path = QFileDialog::getOpenFileName(this, TranslationManager::importSettings(),
+        QStandardPaths::writableLocation(QStandardPaths::DesktopLocation),
+        "JSON (*.json)");
+    if (path.isEmpty()) return;
+
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly)) {
+        QMessageBox::warning(this, TranslationManager::errTitle(), TranslationManager::importError());
+        return;
+    }
+
+    QJsonDocument doc = QJsonDocument::fromJson(file.readAll());
+    file.close();
+
+    if (doc.isNull() || !doc.isObject()) {
+        QMessageBox::warning(this, TranslationManager::errTitle(), TranslationManager::importError());
+        return;
+    }
+
+    QJsonObject obj = doc.object();
+
+    if (obj.contains("language")) {
+        int li = m_langCombo->findData(obj["language"].toString());
+        if (li >= 0) m_langCombo->setCurrentIndex(li);
+    }
+    if (obj.contains("savePath")) m_savePathEdit->setText(obj["savePath"].toString());
+    if (obj.contains("filenamePattern")) m_filenamePatternEdit->setText(obj["filenamePattern"].toString());
+    if (obj.contains("autoStart")) m_autoStartCheck->setChecked(obj["autoStart"].toBool());
+    if (obj.contains("showNotifications")) m_showNotificationsCheck->setChecked(obj["showNotifications"].toBool());
+    if (obj.contains("playSound")) m_playSoundCheck->setChecked(obj["playSound"].toBool());
+    if (obj.contains("copyPathAfterSave")) m_copyPathAfterSaveCheck->setChecked(obj["copyPathAfterSave"].toBool());
+    if (obj.contains("imageFormat")) {
+        int fi = m_formatCombo->findData(obj["imageFormat"].toString());
+        if (fi >= 0) m_formatCombo->setCurrentIndex(fi);
+    }
+    if (obj.contains("imageQuality")) {
+        m_qualitySlider->setValue(obj["imageQuality"].toInt());
+        m_qualitySpin->setValue(obj["imageQuality"].toInt());
+    }
+    if (obj.contains("captureDelay")) m_delaySpin->setValue(obj["captureDelay"].toInt());
+    if (obj.contains("copyAfterCapture")) m_copyAfterCaptureCheck->setChecked(obj["copyAfterCapture"].toBool());
+    if (obj.contains("closeAfterCopy")) m_closeAfterCopyCheck->setChecked(obj["closeAfterCopy"].toBool());
+    if (obj.contains("darkMode")) m_darkModeCheck->setChecked(obj["darkMode"].toBool());
+    if (obj.contains("overlayOpacity")) m_opacitySlider->setValue(obj["overlayOpacity"].toInt());
+    if (obj.contains("crosshairStyle")) {
+        int ci = m_crosshairStyleCombo->findData(obj["crosshairStyle"].toString());
+        if (ci >= 0) m_crosshairStyleCombo->setCurrentIndex(ci);
+    }
+    if (obj.contains("highContrast")) m_highContrastCheck->setChecked(obj["highContrast"].toBool());
+    if (obj.contains("trayIconStyle")) {
+        int ti = m_trayIconCombo->findData(obj["trayIconStyle"].toString());
+        if (ti >= 0) m_trayIconCombo->setCurrentIndex(ti);
+    }
+    if (obj.contains("visibleTools")) {
+        QJsonArray tools = obj["visibleTools"].toArray();
+        QStringList visibleTools;
+        for (const auto &t : tools) visibleTools.append(t.toString());
+        for (int i = 0; i < m_toolVisibilityList->count(); ++i) {
+            QListWidgetItem *item = m_toolVisibilityList->item(i);
+            item->setCheckState(visibleTools.contains(item->data(Qt::UserRole).toString()) ? Qt::Checked : Qt::Unchecked);
+        }
+    }
+    if (obj.contains("hotkeyModifiers") && obj.contains("hotkeyVKey")) {
+        m_hotkeyEdit->setKeySequence(win32ToKeySequence(
+            static_cast<UINT>(obj["hotkeyModifiers"].toInt()),
+            static_cast<UINT>(obj["hotkeyVKey"].toInt())));
+    }
+
+    QMessageBox::information(this, TranslationManager::importSettings(), TranslationManager::importSuccess());
+}
+
+void SettingsDialog::onThemeChanged()
+{
+    bool dark = m_darkModeCheck->isChecked();
+    bool highContrast = m_highContrastCheck->isChecked();
+    QPalette p;
+    if (highContrast) {
+        // Yüksek kontrast modu
+        p.setColor(QPalette::Window, Qt::black);
+        p.setColor(QPalette::WindowText, Qt::white);
+        p.setColor(QPalette::Base, Qt::black);
+        p.setColor(QPalette::AlternateBase, QColor(30,30,30));
+        p.setColor(QPalette::ToolTipBase, Qt::black);
+        p.setColor(QPalette::ToolTipText, Qt::yellow);
+        p.setColor(QPalette::Text, Qt::white);
+        p.setColor(QPalette::Button, Qt::black);
+        p.setColor(QPalette::ButtonText, Qt::white);
+        p.setColor(QPalette::BrightText, Qt::red);
+        p.setColor(QPalette::Link, Qt::cyan);
+        p.setColor(QPalette::Highlight, Qt::yellow);
+        p.setColor(QPalette::HighlightedText, Qt::black);
+    } else if (dark) {
+        p.setColor(QPalette::Window, QColor(53,53,53));
+        p.setColor(QPalette::WindowText, Qt::white);
+        p.setColor(QPalette::Base, QColor(42,42,42));
+        p.setColor(QPalette::AlternateBase, QColor(66,66,66));
+        p.setColor(QPalette::ToolTipBase, QColor(53,53,53));
+        p.setColor(QPalette::ToolTipText, Qt::white);
+        p.setColor(QPalette::Text, Qt::white);
+        p.setColor(QPalette::Button, QColor(53,53,53));
+        p.setColor(QPalette::ButtonText, Qt::white);
+        p.setColor(QPalette::BrightText, Qt::red);
+        p.setColor(QPalette::Link, QColor(42,130,218));
+        p.setColor(QPalette::Highlight, QColor(42,130,218));
+        p.setColor(QPalette::HighlightedText, Qt::black);
+    } else {
+        p.setColor(QPalette::Window, QColor(240,240,240));
+        p.setColor(QPalette::WindowText, Qt::black);
+        p.setColor(QPalette::Base, Qt::white);
+        p.setColor(QPalette::AlternateBase, QColor(233,233,233));
+        p.setColor(QPalette::ToolTipBase, QColor(255,255,220));
+        p.setColor(QPalette::ToolTipText, Qt::black);
+        p.setColor(QPalette::Text, Qt::black);
+        p.setColor(QPalette::Button, QColor(240,240,240));
+        p.setColor(QPalette::ButtonText, Qt::black);
+        p.setColor(QPalette::BrightText, Qt::red);
+        p.setColor(QPalette::Link, QColor(0,0,255));
+        p.setColor(QPalette::Highlight, QColor(0,120,215));
+        p.setColor(QPalette::HighlightedText, Qt::white);
+    }
+    qApp->setPalette(p);
 }

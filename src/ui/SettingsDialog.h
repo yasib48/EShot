@@ -32,6 +32,9 @@ private slots:
     void onSelectAllTools();
     void onDeselectAllTools();
     void onHotkeyChanged(const QKeySequence &seq);
+    void onExportSettings();
+    void onImportSettings();
+    void onThemeChanged();
 
 private:
     void loadSettings();
@@ -71,6 +74,12 @@ private:
     QSlider *m_opacitySlider;
     QLabel *m_opacityValueLabel;
     QComboBox *m_crosshairStyleCombo;
+
+    // Erişilebilirlik
+    QCheckBox *m_highContrastCheck;
+
+    // Tepsi simgesi
+    QComboBox *m_trayIconCombo;
 
     // Arayüz - Araç görünürlüğü
     QListWidget *m_toolVisibilityList;

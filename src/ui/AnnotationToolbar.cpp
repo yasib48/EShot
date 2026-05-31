@@ -23,6 +23,7 @@ AnnotationToolbar::AnnotationToolbar(QWidget *parent)
         setAttribute(Qt::WA_TranslucentBackground, false);
     }
     setFixedHeight(48);
+    setFocusPolicy(Qt::StrongFocus);
 
     QSettings s("EShot", "EShot");
     m_visibleTools = s.value("visibleTools",

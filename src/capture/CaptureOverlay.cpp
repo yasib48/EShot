@@ -2,6 +2,7 @@
 #include "PinnedWindow.h"
 #include "annotation/AnnotationEngine.h"
 #include "ui/AnnotationToolbar.h"
+#include "ui/OCREngine.h"
 #include "../core/TranslationManager.h"
 
 #include <QPainter>
@@ -10,11 +11,9 @@
 #include <QClipboard>
 #include <QMouseEvent>
 #include <QKeyEvent>
-#include <QFileDialog>
 #include <QDateTime>
 #include <QSettings>
 #include <QStandardPaths>
-#include <QInputDialog>
 #include <functional>
 #include <QVBoxLayout>
 #include <QPushButton>
@@ -40,7 +39,7 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
     , m_copyAfterCapture(false)
     , m_closeAfterCopy(false)
     , m_resizeMode(ResNone)
-    , m_windowCaptureMode(false)
+    , m_foregroundHwnd(nullptr)
     , m_isDraggingAnnotation(false)
 {
     setAttribute(Qt::WA_TranslucentBackground, false);
@@ -112,6 +111,10 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
             [this]() { onClose(); });
         closeBtn->setStyleSheet("QPushButton { background-color: #C42B1C; border: none; border-radius: 6px; }"
                                 "QPushButton:hover { background-color: #d43c2d; }");
+        QPushButton *ocrBtn = addBtn(":/icons/ocr.svg", TranslationManager::actionOCR(),
+            [this]() { onExtractText(); });
+        ocrBtn->setStyleSheet("QPushButton { background-color: #6B4C9A; border: none; border-radius: 6px; }"
+                              "QPushButton:hover { background-color: #7D5CB5; }");
     }
     m_actionPanel->setFixedSize(m_actionPanel->sizeHint());
     m_actionPanel->hide();
@@ -126,6 +129,15 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
     m_captureDelayTimer = new QTimer(this);
     m_captureDelayTimer->setSingleShot(true);
     connect(m_captureDelayTimer, &QTimer::timeout, this, &CaptureOverlay::performCapture);
+
+    m_ocrEngine = new OCREngine(this);
+    connect(m_ocrEngine, &OCREngine::textExtracted, this, [this](const QString &text) {
+        QGuiApplication::clipboard()->setText(text);
+        qDebug() << "[CaptureOverlay] OCR result copied to clipboard:" << text.left(100);
+    });
+    connect(m_ocrEngine, &OCREngine::ocrError, this, [](const QString &err) {
+        qDebug() << "[CaptureOverlay] OCR failed:" << err;
+    });
 }
 
 CaptureOverlay::~CaptureOverlay() {}
@@ -141,13 +153,18 @@ void CaptureOverlay::startCapture()
     if (m_annotationEngine) m_annotationEngine->clear();
     hideToolbar();
 
+    // Overlay'den önce aktif pencereyi kaydet (%T dosya adı değişkeni için)
+#ifdef Q_OS_WIN
+    m_foregroundHwnd = GetForegroundWindow();
+#endif
+
     // Ayarları yükle
     QSettings s("EShot", "EShot");
     if (m_toolbar) m_toolbar->refreshTools();
 
     m_overlayOpacity = s.value("overlayOpacity", 100).toInt();
     m_crosshairStyle = s.value("crosshairStyle", "dash").toString();
-    m_copyAfterCapture = s.value("copyAfterCapture", false).toBool();
+    m_copyAfterCapture = s.value("copyAfterCapture", true).toBool();
     m_closeAfterCopy = s.value("closeAfterCopy", true).toBool();
 
     int delayMs = s.value("captureDelay", 0).toInt();
@@ -155,13 +172,6 @@ void CaptureOverlay::startCapture()
         m_captureDelayTimer->start(delayMs);
     else
         performCapture();
-}
-
-void CaptureOverlay::startWindowCapture()
-{
-    m_windowCaptureMode = true;
-    m_hoveredWindowRect = QRect();
-    startCapture();
 }
 
 void CaptureOverlay::performCapture()
@@ -272,19 +282,6 @@ void CaptureOverlay::paintEvent(QPaintEvent *event)
     painter.drawPixmap(0, 0, width(), height(), m_screenSnapshot);
     painter.fillRect(rect(), QColor(0, 0, 0, m_overlayOpacity));
 
-    // Pencere yakalama modunda vurgulama
-    if (m_windowCaptureMode && !m_hoveredWindowRect.isEmpty()) {
-        // Vurgulanan pencerenin içini temizle
-        painter.setCompositionMode(QPainter::CompositionMode_Source);
-        painter.drawPixmap(m_hoveredWindowRect, m_screenSnapshot, m_hoveredWindowRect);
-        painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
-
-        // Mavi çerçeve
-        painter.setPen(QPen(QColor(0, 122, 204), 3));
-        painter.setBrush(Qt::NoBrush);
-        painter.drawRect(m_hoveredWindowRect);
-    }
-
     QRect selRect = normalizedSelectionRect();
 
     if (!selRect.isEmpty()) {
@@ -369,20 +366,6 @@ void CaptureOverlay::mousePressEvent(QMouseEvent *event)
         if (m_actionPanel && m_actionPanel->isVisible() && m_actionPanel->geometry().contains(event->pos()))
             return;
 
-        // Pencere yakalama modunda pencereyi yakala
-        if (m_windowCaptureMode && !m_hoveredWindowRect.isEmpty()) {
-            m_selectionStart = m_hoveredWindowRect.topLeft();
-            m_selectionEnd = m_hoveredWindowRect.bottomRight();
-            m_isSelecting = false;
-            m_selectionComplete = true;
-            m_windowCaptureMode = false;
-            m_hoveredWindowRect = QRect();
-            if (m_annotationEngine) m_annotationEngine->clear();
-            showToolbar();
-            update();
-            return;
-        }
-
         if (m_selectionComplete) {
             QRect selRect = normalizedSelectionRect();
 
@@ -459,52 +442,6 @@ void CaptureOverlay::mousePressEvent(QMouseEvent *event)
 
 void CaptureOverlay::mouseMoveEvent(QMouseEvent *event)
 {
-    // Pencere yakalama modunda pencere algılama
-    if (m_windowCaptureMode && !m_selectionComplete) {
-#ifdef Q_OS_WIN
-        POINT pt;
-        pt.x = event->globalPosition().toPoint().x();
-        pt.y = event->globalPosition().toPoint().y();
-
-        // Önce en üstteki pencereyi bul
-        HWND topHwnd = WindowFromPoint(pt);
-        if (topHwnd) {
-            // Overlay penceresini atla
-            HWND myHwnd = (HWND)winId();
-            HWND checkHwnd = topHwnd;
-            while (checkHwnd && checkHwnd != myHwnd) {
-                HWND parent = GetAncestor(checkHwnd, GA_ROOT);
-                if (parent == checkHwnd || parent == myHwnd) break;
-                checkHwnd = parent;
-            }
-            // Alt pencereyi bul (overlay olmayan)
-            HWND targetHwnd = topHwnd;
-            HWND iter = topHwnd;
-            while (iter) {
-                HWND root = GetAncestor(iter, GA_ROOT);
-                if (root && root != myHwnd) {
-                    targetHwnd = root;
-                    break;
-                }
-                iter = GetParent(iter);
-            }
-
-            if (targetHwnd != myHwnd) {
-                RECT winRect;
-                if (GetWindowRect(targetHwnd, &winRect)) {
-                    m_hoveredWindowRect = QRect(winRect.left, winRect.top,
-                        winRect.right - winRect.left, winRect.bottom - winRect.top);
-                    update();
-                    return;
-                }
-            }
-        }
-#endif
-        m_hoveredWindowRect = QRect();
-        update();
-        return;
-    }
-
     // Annotation taşıma
     if (m_isDraggingAnnotation && m_annotationEngine && m_annotationEngine->selectedIndex() >= 0) {
         QRect selRect = normalizedSelectionRect();
@@ -603,6 +540,12 @@ void CaptureOverlay::mouseReleaseEvent(QMouseEvent *event)
             if (selRect.width() > 10 && selRect.height() > 10) {
                 m_selectionComplete = true;
                 showToolbar();
+                // copyAfterCapture aktifse otomatik kopyala
+                if (m_copyAfterCapture) {
+                    QPixmap result = getSelectedPixmap();
+                    if (!result.isNull())
+                        QGuiApplication::clipboard()->setPixmap(result);
+                }
             }
             update();
         } else if (m_selectionComplete) {
@@ -734,7 +677,9 @@ QString CaptureOverlay::resolveFilenamePattern(const QString &pattern) const
 QString CaptureOverlay::resolveWindowTitle() const
 {
 #ifdef Q_OS_WIN
-    HWND hwnd = GetForegroundWindow();
+    // Kaydedilmiş aktif pencereyi kullan (overlay gösterilmeden önceki)
+    HWND hwnd = m_foregroundHwnd;
+    if (!hwnd) hwnd = GetForegroundWindow();
     if (hwnd) {
         wchar_t title[256];
         int len = GetWindowTextW(hwnd, title, 256);
@@ -805,13 +750,6 @@ void CaptureOverlay::showToolbar()
         m_actionPanel->move(px, py);
         m_actionPanel->show();
         m_actionPanel->raise();
-    }
-
-    // copyAfterCapture ayarı aktifse, seçimi panoya kopyala
-    if (m_copyAfterCapture) {
-        QPixmap result = getSelectedPixmap();
-        if (!result.isNull())
-            QGuiApplication::clipboard()->setPixmap(result);
     }
 }
 
@@ -890,7 +828,11 @@ void CaptureOverlay::onCopyToClipboard()
     QPixmap result = getSelectedPixmap();
     if (result.isNull()) return;
     QGuiApplication::clipboard()->setPixmap(result);
-    finishCapture();
+
+    // closeAfterCopy aktifse overlay'i kapat
+    if (m_closeAfterCopy) {
+        finishCapture();
+    }
 }
 
 void CaptureOverlay::onSave()
@@ -949,16 +891,24 @@ void CaptureOverlay::onPinToDesktop()
     QRect selRect = normalizedSelectionRect();
     QPoint screenPos = mapToGlobal(selRect.topLeft());
 
-    // Yeni PinnedWindow oluştur
     PinnedWindow *pin = new PinnedWindow(result, screenPos);
     m_pinnedWindows.append(QPointer<QWidget>(pin));
+    emit pinnedWindowCreated(pin);
 
-    // Overlay'i kapat
     hide();
     m_selectionComplete = false;
     m_isSelecting = false;
 
     qDebug() << "[CaptureOverlay] Pinned to desktop at" << screenPos;
+}
+
+void CaptureOverlay::onExtractText()
+{
+    QPixmap result = getSelectedPixmap();
+    if (result.isNull()) return;
+    if (m_ocrEngine && !m_ocrEngine->isProcessing()) {
+        m_ocrEngine->extractText(result);
+    }
 }
 
 CaptureOverlay::ResizeMode CaptureOverlay::getResizeMode(const QPoint &pos)

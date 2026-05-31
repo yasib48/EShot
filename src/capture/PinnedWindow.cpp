@@ -4,29 +4,37 @@
 #include <QPainterPath>
 #include <QMouseEvent>
 #include <QKeyEvent>
+#include <QWheelEvent>
 #include <QMenu>
 #include <QAction>
 #include <QApplication>
 #include <QClipboard>
 #include <QGuiApplication>
+#include <QFileDialog>
 #include <QDebug>
 #include "../core/TranslationManager.h"
 
 static constexpr int BAR_HEIGHT = 32;
 static constexpr int CLOSE_BTN_SIZE = 20;
+static constexpr int HANDLE_SIZE = 8;
+static constexpr double MIN_SCALE = 0.1;
+static constexpr double MAX_SCALE = 5.0;
 
 PinnedWindow::PinnedWindow(const QPixmap &pixmap, const QPoint &screenPos, QWidget *parent)
     : QWidget(parent, Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::Tool)
     , m_pixmap(pixmap)
+    , m_scale(1.0)
     , m_dragging(false)
     , m_hovered(false)
+    , m_opacity(1.0)
+    , m_resizeHandle(NoHandle)
 {
     setAttribute(Qt::WA_DeleteOnClose, true);
     setAttribute(Qt::WA_TranslucentBackground, true);
     setMouseTracking(true);
     setCursor(Qt::SizeAllCursor);
 
-    setFixedSize(m_pixmap.width() + 2, m_pixmap.height() + BAR_HEIGHT + 2);
+    updateWindowSize();
     move(screenPos);
     show();
 
@@ -38,11 +46,46 @@ PinnedWindow::~PinnedWindow()
     qDebug() << "[PinnedWindow] Destroyed";
 }
 
+void PinnedWindow::updateWindowSize()
+{
+    int w = qMax(1, static_cast<int>(m_pixmap.width() * m_scale));
+    int h = qMax(1, static_cast<int>(m_pixmap.height() * m_scale));
+    setFixedSize(w + 2, h + BAR_HEIGHT + 2);
+}
+
+void PinnedWindow::setOpacity(double opacity)
+{
+    m_opacity = qBound(0.1, opacity, 1.0);
+    setWindowOpacity(m_opacity);
+    update();
+}
+
 QRect PinnedWindow::closeButtonRect() const
 {
     int x = width() - CLOSE_BTN_SIZE - 8;
     int y = (BAR_HEIGHT - CLOSE_BTN_SIZE) / 2 + 1;
     return QRect(x, y, CLOSE_BTN_SIZE, CLOSE_BTN_SIZE);
+}
+
+QRect PinnedWindow::handleRect(ResizeHandle handle) const
+{
+    int s = HANDLE_SIZE;
+    switch (handle) {
+        case TopLeft:      return QRect(0, 0, s, s);
+        case TopRight:     return QRect(width() - s, 0, s, s);
+        case BottomLeft:   return QRect(0, height() - s, s, s);
+        case BottomRight:  return QRect(width() - s, height() - s, s, s);
+        default:           return QRect();
+    }
+}
+
+PinnedWindow::ResizeHandle PinnedWindow::getResizeHandle(const QPoint &pos) const
+{
+    if (handleRect(TopLeft).contains(pos))     return TopLeft;
+    if (handleRect(TopRight).contains(pos))    return TopRight;
+    if (handleRect(BottomLeft).contains(pos))  return BottomLeft;
+    if (handleRect(BottomRight).contains(pos)) return BottomRight;
+    return NoHandle;
 }
 
 void PinnedWindow::paintEvent(QPaintEvent *event)
@@ -51,20 +94,20 @@ void PinnedWindow::paintEvent(QPaintEvent *event)
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
 
-    // 1. Şeffaf arka plan
     painter.fillRect(rect(), Qt::transparent);
 
-    // 2. Pixmap (en alta)
-    painter.drawPixmap(1, BAR_HEIGHT + 1, m_pixmap);
+    // Orijinal görseli ölçeklenmiş boyutta çiz
+    int drawW = qMax(1, static_cast<int>(m_pixmap.width() * m_scale));
+    int drawH = qMax(1, static_cast<int>(m_pixmap.height() * m_scale));
+    painter.drawPixmap(1, BAR_HEIGHT + 1, drawW, drawH, m_pixmap);
 
-    // 3. Üst bar (her zaman görünür, yuvarlak köşeli)
+    // Üst bar
     QPainterPath barPath;
     barPath.addRoundedRect(QRectF(1, 1, width() - 2, BAR_HEIGHT), 6, 6);
     painter.setPen(Qt::NoPen);
     painter.setBrush(QColor(20, 20, 20, 210));
     painter.drawPath(barPath);
 
-    // 4. Hover: kapatma butonu ve pin ikonu
     if (m_hovered) {
         // Kapatma butonu
         QRect closeRect = closeButtonRect();
@@ -72,7 +115,6 @@ void PinnedWindow::paintEvent(QPaintEvent *event)
         painter.setBrush(QColor(70, 70, 70, 200));
         painter.drawRoundedRect(closeRect, 3, 3);
 
-        // X işareti
         painter.setPen(QPen(QColor(200, 200, 200), 1.5));
         int m = 5;
         painter.drawLine(closeRect.left() + m, closeRect.top() + m,
@@ -80,7 +122,7 @@ void PinnedWindow::paintEvent(QPaintEvent *event)
         painter.drawLine(closeRect.right() - m, closeRect.top() + m,
                          closeRect.left() + m, closeRect.bottom() - m);
 
-        // Pin ikonu (daire + çizgi)
+        // Pin ikonu
         int iconX = 14;
         int iconY = BAR_HEIGHT / 2;
         painter.setPen(QPen(QColor(0, 122, 204), 1.5));
@@ -88,16 +130,27 @@ void PinnedWindow::paintEvent(QPaintEvent *event)
         painter.drawEllipse(QPoint(iconX, iconY - 2), 3, 3);
         painter.drawLine(iconX, iconY + 1, iconX, iconY + 7);
 
-        // "Pinned" yazısı
+        // Boyut bilgisi
+        QString sizeText = QString("%1x%2 (%3%)")
+            .arg(m_pixmap.width()).arg(m_pixmap.height())
+            .arg(qRound(m_scale * 100));
         painter.setPen(QColor(180, 180, 180));
         QFont f("Segoe UI", 9);
         f.setBold(true);
         painter.setFont(f);
         painter.drawText(iconX + 8, 0, width() - iconX - 8 - CLOSE_BTN_SIZE - 14, BAR_HEIGHT,
-                         Qt::AlignVCenter, TranslationManager::pinnedLabel());
+                         Qt::AlignVCenter, sizeText);
+
+        // Yeniden boyutlandırma tutamakları
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(QColor(0, 122, 204, 180));
+        for (int i = TopLeft; i <= BottomRight; ++i) {
+            QRect hr = handleRect(static_cast<ResizeHandle>(i));
+            painter.drawRoundedRect(hr, 2, 2);
+        }
     }
 
-    // 5. Border (her zaman en üstte)
+    // Border
     QPainterPath borderPath;
     borderPath.addRoundedRect(QRectF(1, 1, width() - 2, height() - 2), 7, 7);
     painter.setPen(QPen(QColor(0, 122, 204), 2));
@@ -112,6 +165,15 @@ void PinnedWindow::mousePressEvent(QMouseEvent *event)
             close();
             return;
         }
+
+        ResizeHandle handle = getResizeHandle(event->pos());
+        if (handle != NoHandle) {
+            m_resizeHandle = handle;
+            m_resizeStartGlobal = event->globalPosition().toPoint();
+            m_resizeStartSize = QSize(width(), height());
+            return;
+        }
+
         m_dragging = true;
         m_dragOffset = event->pos();
     }
@@ -119,8 +181,66 @@ void PinnedWindow::mousePressEvent(QMouseEvent *event)
 
 void PinnedWindow::mouseMoveEvent(QMouseEvent *event)
 {
+    if (m_resizeHandle != NoHandle) {
+        QPoint current = event->globalPosition().toPoint();
+        QPoint delta = current - m_resizeStartGlobal;
+
+        // Köşeye göre ölçek hesapla
+        double newW, newH;
+        switch (m_resizeHandle) {
+            case BottomRight:
+                newW = m_resizeStartSize.width() + delta.x();
+                newH = m_resizeStartSize.height() + delta.y();
+                break;
+            case BottomLeft:
+                newW = m_resizeStartSize.width() - delta.x();
+                newH = m_resizeStartSize.height() + delta.y();
+                break;
+            case TopRight:
+                newW = m_resizeStartSize.width() + delta.x();
+                newH = m_resizeStartSize.height() - delta.y();
+                break;
+            case TopLeft:
+                newW = m_resizeStartSize.width() - delta.x();
+                newH = m_resizeStartSize.height() - delta.y();
+                break;
+            default:
+                return;
+        }
+
+        // En-boy oranını koru
+        double aspect = static_cast<double>(m_pixmap.width()) / m_pixmap.height();
+        double avgDim = (newW + newH) / 2.0;
+        newW = avgDim;
+        newH = avgDim / aspect;
+
+        // Ölçek sınırları
+        double newScaleW = newW / m_pixmap.width();
+        double newScaleH = newH / m_pixmap.height();
+        m_scale = qBound(MIN_SCALE, qMin(newScaleW, newScaleH), MAX_SCALE);
+
+        updateWindowSize();
+        update();
+        return;
+    }
+
     if (m_dragging) {
         move(event->globalPosition().toPoint() - m_dragOffset);
+    }
+
+    // Cursor güncelle
+    if (m_hovered) {
+        ResizeHandle handle = getResizeHandle(event->pos());
+        switch (handle) {
+            case TopLeft:
+            case BottomRight:
+                setCursor(Qt::SizeFDiagCursor); break;
+            case TopRight:
+            case BottomLeft:
+                setCursor(Qt::SizeBDiagCursor); break;
+            default:
+                setCursor(Qt::SizeAllCursor); break;
+        }
     }
 }
 
@@ -128,6 +248,7 @@ void PinnedWindow::mouseReleaseEvent(QMouseEvent *event)
 {
     if (event->button() == Qt::LeftButton) {
         m_dragging = false;
+        m_resizeHandle = NoHandle;
     }
 }
 
@@ -149,6 +270,21 @@ void PinnedWindow::leaveEvent(QEvent *event)
 {
     Q_UNUSED(event);
     m_hovered = false;
+    setCursor(Qt::SizeAllCursor);
+    update();
+}
+
+void PinnedWindow::wheelEvent(QWheelEvent *event)
+{
+    double delta = event->angleDelta().y() > 0 ? 0.05 : -0.05;
+    if (event->modifiers() & Qt::ShiftModifier) {
+        // Shift + Scroll → Ölçek (zoom)
+        m_scale = qBound(MIN_SCALE, m_scale + delta, MAX_SCALE);
+        updateWindowSize();
+    } else {
+        // Normal Scroll → Opaklık
+        setOpacity(m_opacity + delta);
+    }
     update();
 }
 
@@ -159,6 +295,20 @@ void PinnedWindow::contextMenuEvent(QContextMenuEvent *event)
     QAction *copyAction = menu.addAction(TranslationManager::pinnedCopy());
     connect(copyAction, &QAction::triggered, [this]() {
         QGuiApplication::clipboard()->setPixmap(m_pixmap);
+    });
+
+    QAction *saveAction = menu.addAction(TranslationManager::pinnedSave());
+    connect(saveAction, &QAction::triggered, [this]() {
+        QString path = QFileDialog::getSaveFileName(this, TranslationManager::pinnedSave(),
+            QString(), "PNG (*.png);;JPEG (*.jpg);;BMP (*.bmp)");
+        if (!path.isEmpty()) {
+            if (path.endsWith(".jpg", Qt::CaseInsensitive))
+                m_pixmap.save(path, "JPEG", 95);
+            else if (path.endsWith(".bmp", Qt::CaseInsensitive))
+                m_pixmap.save(path, "BMP");
+            else
+                m_pixmap.save(path, "PNG");
+        }
     });
 
     menu.addSeparator();

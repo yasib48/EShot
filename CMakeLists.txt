@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(EShot VERSION 2.0.0 LANGUAGES CXX)
+project(EShot VERSION 2.1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -7,27 +7,33 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Network)
 
 set(SOURCES
     src/main.cpp
     src/core/HotkeyManager.cpp
     src/capture/CaptureOverlay.cpp
     src/capture/PinnedWindow.cpp
+    src/capture/PinManager.cpp
     src/annotation/AnnotationEngine.cpp
     src/ui/AnnotationToolbar.cpp
     src/ui/SettingsDialog.cpp
     src/ui/AboutDialog.cpp
+    src/ui/OCREngine.cpp
+    src/ui/FirstRunWizard.cpp
 )
 
 set(HEADERS
     src/core/HotkeyManager.h
     src/capture/CaptureOverlay.h
     src/capture/PinnedWindow.h
+    src/capture/PinManager.h
     src/annotation/AnnotationEngine.h
     src/ui/AnnotationToolbar.h
     src/ui/SettingsDialog.h
     src/ui/AboutDialog.h
+    src/ui/OCREngine.h
+    src/ui/FirstRunWizard.h
 )
 
 set(RESOURCES
@@ -63,6 +69,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     Qt6::Core
     Qt6::Gui
     Qt6::Widgets
+    Qt6::Network
     User32
     Gdi32
     Shell32

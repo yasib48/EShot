@@ -248,7 +248,6 @@ void AnnotationEngine::drawAnnotation(QPainter *painter, const Annotation &ann, 
 void AnnotationEngine::clear()
 {
     m_annotations.clear();
-    m_redoStack.clear();
     m_counterValue = 0;
 }
 
@@ -289,6 +288,7 @@ void AnnotationEngine::addCounterAnnotation(const QPoint &pos)
     ann.penWidth = m_penWidth;
     ann.points.append(pos);
     ann.counterValue = ++m_counterValue;
+    m_redoStack.clear();
     m_annotations.append(ann);
     emit annotationAdded();
 }
@@ -312,6 +312,7 @@ bool AnnotationEngine::eraseAnnotationAt(const QPoint &pos)
         }
 
         if (bounds.contains(pos)) {
+            m_redoStack.append(m_annotations[i]);
             m_annotations.removeAt(i);
             return true;
         }

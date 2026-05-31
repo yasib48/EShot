@@ -12,6 +12,7 @@
 class AnnotationToolbar;
 class AnnotationEngine;
 class PinnedWindow;
+class OCREngine;
 
 class CaptureOverlay : public QWidget {
     Q_OBJECT
@@ -20,11 +21,11 @@ public:
     explicit CaptureOverlay(QWidget *parent = nullptr);
     ~CaptureOverlay();
     void startCapture();
-    void startWindowCapture();
 
 signals:
     void captureCompleted(const QPixmap &pixmap);
     void captureCancelled();
+    void pinnedWindowCreated(PinnedWindow *window);
 
 protected:
     void paintEvent(QPaintEvent *event) override;
@@ -72,13 +73,12 @@ private:
     ResizeMode getResizeMode(const QPoint &pos);
     void updateCursor(const QPoint &pos);
 
-    // Pencere yakalama modu
-    bool m_windowCaptureMode;
-    QRect m_hoveredWindowRect;
-
     // Annotation taşıma
     bool m_isDraggingAnnotation;
     QPoint m_dragAnnotationStart;
+
+    // Aktif pencere başlığı (%T için)
+    HWND m_foregroundHwnd;
 
     QTimer *m_captureDelayTimer;
 
@@ -95,12 +95,16 @@ private:
     // Pinned pencereler listesi (ömür yönetimi için)
     QList<QPointer<QWidget>> m_pinnedWindows;
 
+    // OCR
+    OCREngine *m_ocrEngine;
+
 private slots:
     void onToolSelected(int toolId);
     void onCopyToClipboard();
     void onSave();
     void onClose();
     void onPinToDesktop();
+    void onExtractText();
     void performCapture();
 };
 

@@ -46,11 +46,8 @@ void AboutDialog::setupUI()
     layout->addWidget(verLabel);
 
     QLabel *descLabel = new QLabel(
-        TranslationManager::langCode() == "tr"
-            ? "Gelişmiş Windows Ekran Alıntısı Aracı<br>"
-              "<a href='https://github.com/Benoks/EShot' style='color: #4285F4; text-decoration: none;'>GitHub Sayfası</a>"
-            : "Advanced Windows Screenshot Tool<br>"
-              "<a href='https://github.com/Benoks/EShot' style='color: #4285F4; text-decoration: none;'>GitHub Page</a>"
+        TranslationManager::aboutDesc() + "<br>"
+        "<a href='https://github.com/Benoks/EShot' style='color: #4285F4; text-decoration: none;'>GitHub</a>"
     );
     descLabel->setAlignment(Qt::AlignCenter);
     descLabel->setOpenExternalLinks(true);

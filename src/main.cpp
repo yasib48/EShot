@@ -233,7 +233,7 @@ int main(int argc, char *argv[])
 
     QApplication app(argc, argv);
     app.setApplicationName("EShot");
-    app.setApplicationVersion("2.1.1");
+    app.setApplicationVersion("2.1.2");
     app.setOrganizationName("EShot");
     app.setQuitOnLastWindowClosed(false);
     app.setStyle("Fusion");

@@ -5,7 +5,7 @@ A fast, lightweight screenshot tool for Windows with annotation tools, pin-to-de
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11-blue.svg)]()
 [![Qt](https://img.shields.io/badge/Qt-6.8-green.svg)]()
-[![Version](https://img.shields.io/badge/Version-2.1.1-orange.svg)]()
+[![Version](https://img.shields.io/badge/Version-2.1.2-orange.svg)]()
 
 <p align="center">
   <img src="preview.png" alt="EShot Preview" width="700">

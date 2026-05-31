@@ -78,42 +78,53 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
     });
     m_actionPanel = new QWidget(this);
     m_actionPanel->setStyleSheet(R"(
-        QWidget { background-color: #1a1a1a; border: 2px solid #444; border-radius: 12px; }
+        QWidget { background-color: #2d2d2d; border: 1px solid #404040; border-radius: 10px; }
     )");
     QVBoxLayout *actionLayout = new QVBoxLayout(m_actionPanel);
-    actionLayout->setContentsMargins(6, 6, 6, 6);
-    actionLayout->setSpacing(4);
+    actionLayout->setContentsMargins(6, 8, 6, 8);
+    actionLayout->setSpacing(5);
     {
         auto addBtn = [&](const QString &icon, const QString &tip, std::function<void()> handler) {
             QPushButton *btn = new QPushButton(this);
             btn->setToolTip(tip);
             btn->setCursor(Qt::PointingHandCursor);
-            btn->setFixedSize(32, 32);
+            btn->setFixedSize(36, 36);
             btn->setIcon(QIcon(icon));
-            btn->setIconSize(QSize(18, 18));
+            btn->setIconSize(QSize(20, 20));
             connect(btn, &QPushButton::clicked, this, [handler](bool) { handler(); });
             actionLayout->addWidget(btn);
             return btn;
         };
         QPushButton *pinBtn = addBtn(":/icons/pin.svg", TranslationManager::actionPin(),
             [this]() { onPinToDesktop(); });
-        pinBtn->setStyleSheet("QPushButton { background-color: #6B4C9A; border: none; border-radius: 6px; }"
-                              "QPushButton:hover { background-color: #7D5CB5; }");
+        pinBtn->setStyleSheet(R"(
+            QPushButton { background-color: #3a3a3a; border: 1px solid #505050; border-radius: 8px; }
+            QPushButton:hover { background-color: #454545; border-color: #606060; }
+            QPushButton:pressed { background-color: #333333; }
+        )");
         QPushButton *copyBtn = addBtn(":/icons/copy.svg", TranslationManager::actionCopy(),
             [this]() { onCopyToClipboard(); });
-        copyBtn->setStyleSheet("QPushButton { background-color: #0078D4; border: none; border-radius: 6px; }"
-                               "QPushButton:hover { background-color: #1084D8; }");
+        copyBtn->setStyleSheet(R"(
+            QPushButton { background-color: #3a3a3a; border: 1px solid #505050; border-radius: 8px; }
+            QPushButton:hover { background-color: #454545; border-color: #606060; }
+            QPushButton:pressed { background-color: #333333; }
+        )");
         QPushButton *saveBtn = addBtn(":/icons/save.svg", TranslationManager::actionSave(),
             [this]() { onSave(); });
-        saveBtn->setStyleSheet("QPushButton { background-color: #107C10; border: none; border-radius: 6px; }"
-                               "QPushButton:hover { background-color: #1a8c1a; }");
+        saveBtn->setStyleSheet(R"(
+            QPushButton { background-color: #3a3a3a; border: 1px solid #505050; border-radius: 8px; }
+            QPushButton:hover { background-color: #454545; border-color: #606060; }
+            QPushButton:pressed { background-color: #333333; }
+        )");
         QPushButton *closeBtn = addBtn(":/icons/close.svg", TranslationManager::actionClose(),
             [this]() { onClose(); });
-        closeBtn->setStyleSheet("QPushButton { background-color: #C42B1C; border: none; border-radius: 6px; }"
-                                "QPushButton:hover { background-color: #d43c2d; }");
+        closeBtn->setStyleSheet(R"(
+            QPushButton { background-color: #3a3a3a; border: 1px solid #505050; border-radius: 8px; }
+            QPushButton:hover { background-color: #454545; border-color: #606060; }
+            QPushButton:pressed { background-color: #333333; }
+        )");
 
     }
-    m_actionPanel->setFixedSize(m_actionPanel->sizeHint());
     m_actionPanel->hide();
 
     connect(m_toolbar, &AnnotationToolbar::colorChanged, [this](const QColor &c) {
@@ -707,34 +718,33 @@ void CaptureOverlay::showToolbar()
 {
     if (!m_toolbar) return;
     QRect selRect = normalizedSelectionRect();
-    int tw = m_toolbar->sizeHint().width();
+    int margin = 12;
+
+    // --- Alt toolbar: seçimin altında, ortalanmış ---
     int th = m_toolbar->sizeHint().height();
-    int margin = 10;
+    int toolbarWidth = m_toolbar->sizeHint().width();
+    int minToolbarWidth = toolbarWidth; // Butonların sığıdığı minimum
 
-    // --- Alt toolbar: önce seçimin altında, sığmazsa üstte ---
-    int tx = selRect.right() - tw - 5;
+    int tx = selRect.center().x() - toolbarWidth / 2;
     int ty = selRect.bottom() + margin;
-    bool toolbarInside = false;
 
-    if (ty + th > height() - 5)
-        ty = selRect.top() - th - margin;
-    if (ty < 5) {
-        ty = selRect.bottom() - th - 5;
-        toolbarInside = true;
-    }
+    // Ekran sınırları kontrolü
+    if (tx < 5) tx = 5;
+    if (tx + toolbarWidth > width() - 5) tx = width() - toolbarWidth - 5;
+    if (ty + th > height() - 5) ty = selRect.top() - th - margin;
 
+    m_toolbar->setFixedWidth(toolbarWidth);
     m_toolbar->move(tx, ty);
     m_toolbar->show();
     m_toolbar->raise();
 
-    // --- Sağ panel: önce seçimin sağına, sığmazsa içine ---
+    // --- Sağ panel: seçimin sağında, dikey olarak ortalanmış ---
     if (m_actionPanel) {
         m_actionPanel->adjustSize();
         int pw = m_actionPanel->width();
         int ph = m_actionPanel->height();
         int px = selRect.right() + margin;
-        int py = selRect.bottom() - ph - 5;
-        bool panelInside = false;
+        int py = selRect.center().y() - ph / 2;
 
         // Sağa sığmıyorsa sola dene
         if (px + pw > width() - 5)
@@ -743,18 +753,18 @@ void CaptureOverlay::showToolbar()
         // Sola da sığmıyorsa içine koy
         if (px < 5) {
             px = selRect.right() - pw - 5;
-            panelInside = true;
+            py = selRect.top() + 5;
         }
 
-        // İkisi de içerideyse çakışmayı önle: sağ panel toolbar'ın üstünde
-        if (panelInside && toolbarInside) {
-            py = ty - ph - 8;
-            if (py < selRect.top() + 5)
-                py = selRect.top() + 5;
-        } else if (panelInside) {
-            int bottomOfToolbar = ty + th + 8;
-            if (py < bottomOfToolbar && py + ph > ty)
-                py = selRect.top() + 5;
+        // Üst-alt sınırları kontrolü
+        if (py < 5) py = 5;
+        if (py + ph > height() - 5) py = height() - ph - 5;
+
+        // Alt toolbar ile çakışma kontrolü
+        int toolbarBottom = ty + th + 5;
+        if (px + pw > selRect.right() - 5 && py + ph > toolbarBottom - 5 && py < toolbarBottom) {
+            py = toolbarBottom;
+            if (py + ph > height() - 5) py = selRect.top() + 5;
         }
 
         m_actionPanel->move(px, py);

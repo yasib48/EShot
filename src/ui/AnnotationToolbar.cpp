@@ -24,6 +24,7 @@ AnnotationToolbar::AnnotationToolbar(QWidget *parent)
     }
     setFixedHeight(48);
     setFocusPolicy(Qt::StrongFocus);
+    setMinimumWidth(500); // Butonların sığıdığı minimum genişlik
 
     QSettings s("EShot", "EShot");
     m_visibleTools = s.value("visibleTools",
@@ -73,8 +74,8 @@ QWidget* AnnotationToolbar::createSeparator()
     QFrame *sep = new QFrame(this);
     sep->setFrameShape(QFrame::VLine);
     sep->setFixedWidth(1);
-    sep->setFixedHeight(24);
-    sep->setStyleSheet("background-color: #555;");
+    sep->setFixedHeight(26);
+    sep->setStyleSheet("background-color: #505050;");
     return sep;
 }
 
@@ -105,12 +106,24 @@ void AnnotationToolbar::setupUI()
     QSlider *slider = new QSlider(Qt::Horizontal, this);
     slider->setRange(1, 20);
     slider->setValue(3);
-    slider->setFixedWidth(70);
+    slider->setFixedWidth(80);
     slider->setToolTip(TranslationManager::toolWidth());
     slider->setStyleSheet(R"(
-        QSlider::groove:horizontal { background: #444; height: 4px; border-radius: 2px; }
-        QSlider::handle:horizontal { background: #0078D4; width: 14px; height: 14px; margin: -5px 0; border-radius: 7px; }
-        QSlider::handle:horizontal:hover { background: #1a8cff; }
+        QSlider::groove:horizontal {
+            background: #404040;
+            height: 4px;
+            border-radius: 2px;
+        }
+        QSlider::handle:horizontal {
+            background: #0078D4;
+            width: 14px;
+            height: 14px;
+            margin: -5px 0;
+            border-radius: 7px;
+        }
+        QSlider::handle:horizontal:hover {
+            background: #1a8cff;
+        }
     )");
     connect(slider, &QSlider::valueChanged, this, &AnnotationToolbar::onWidthSliderChanged);
     m_layout->addWidget(slider);
@@ -127,23 +140,24 @@ void AnnotationToolbar::applyStyles()
 {
     setStyleSheet(R"(
         AnnotationToolbar {
-            background-color: #1a1a1a;
-            border: 2px solid #444;
-            border-radius: 12px;
+            background-color: #2d2d2d;
+            border: 1px solid #404040;
+            border-radius: 10px;
         }
         QToolTip {
             color: #ffffff;
-            background-color: #333333;
+            background-color: #3a3a3a;
             border: 1px solid #555555;
-            padding: 4px;
+            padding: 4px 8px;
             font-size: 12px;
+            border-radius: 4px;
         }
     )");
 
     QGraphicsDropShadowEffect *shadow = new QGraphicsDropShadowEffect(this);
-    shadow->setBlurRadius(24);
-    shadow->setColor(QColor(0,0,0,180));
-    shadow->setOffset(0, 6);
+    shadow->setBlurRadius(20);
+    shadow->setColor(QColor(0,0,0,160));
+    shadow->setOffset(0, 4);
     setGraphicsEffect(shadow);
 }
 
@@ -155,14 +169,26 @@ QPushButton* AnnotationToolbar::createToolButton(const QString &iconPath, const 
     btn->setToolTip(tooltip);
     btn->setProperty("toolId", toolId);
     btn->setCursor(Qt::PointingHandCursor);
-    btn->setFixedSize(32, 32);
+    btn->setFixedSize(34, 34);
     btn->setIcon(QIcon(iconPath));
     btn->setIconSize(QSize(18, 18));
     btn->setStyleSheet(R"(
-        QPushButton { background-color: transparent; border: none; border-radius: 6px; }
-        QPushButton:hover { background-color: #3d3d3d; }
-        QPushButton:pressed { background-color: #2d2d2d; }
-        QPushButton[selected="true"] { background-color: #0078D4; border: none; }
+        QPushButton {
+            background-color: #3a3a3a;
+            border: 1px solid #505050;
+            border-radius: 8px;
+        }
+        QPushButton:hover {
+            background-color: #4a4a4a;
+            border-color: #606060;
+        }
+        QPushButton:pressed {
+            background-color: #333333;
+        }
+        QPushButton[selected="true"] {
+            background-color: #0078D4;
+            border: 1px solid #1a8cff;
+        }
     )");
     connect(btn, &QPushButton::clicked, this, &AnnotationToolbar::onToolButtonClicked);
     m_toolButtons[toolId] = btn;
@@ -176,18 +202,24 @@ QPushButton* AnnotationToolbar::createActionButton(const QString &iconPath, cons
     btn->setToolTip(tooltip);
     btn->setProperty("action", action);
     btn->setCursor(Qt::PointingHandCursor);
-    btn->setFixedSize(32, 32);
+    btn->setFixedSize(34, 34);
     btn->setIcon(QIcon(iconPath));
     btn->setIconSize(QSize(18, 18));
 
-    QString bg = "transparent", hv = "#3d3d3d";
-    if (action == "undo" || action == "redo") { bg = "transparent"; hv = "#3d3d3d"; }
-
-    btn->setStyleSheet(QString(R"(
-        QPushButton { background-color: %1; border: none; border-radius: 6px; }
-        QPushButton:hover { background-color: %2; }
-        QPushButton:pressed { background-color: %1; }
-    )").arg(bg, hv));
+    btn->setStyleSheet(R"(
+        QPushButton {
+            background-color: #3a3a3a;
+            border: 1px solid #505050;
+            border-radius: 8px;
+        }
+        QPushButton:hover {
+            background-color: #4a4a4a;
+            border-color: #606060;
+        }
+        QPushButton:pressed {
+            background-color: #333333;
+        }
+    )");
 
     connect(btn, &QPushButton::clicked, this, &AnnotationToolbar::onActionButtonClicked);
     m_actionButtons[action] = btn;
@@ -199,10 +231,16 @@ QPushButton* AnnotationToolbar::createColorButton(const QColor &color)
     QPushButton *btn = new QPushButton(this);
     btn->setToolTip(TranslationManager::toolColor());
     btn->setCursor(Qt::PointingHandCursor);
-    btn->setFixedSize(26, 26);
+    btn->setFixedSize(34, 34);
     btn->setStyleSheet(QString(R"(
-        QPushButton { background-color: %1; border: 2px solid #555; border-radius: 13px; }
-        QPushButton:hover { border-color: #fff; }
+        QPushButton {
+            background-color: %1;
+            border: 2px solid #505050;
+            border-radius: 8px;
+        }
+        QPushButton:hover {
+            border-color: #707070;
+        }
     )").arg(color.name()));
     connect(btn, &QPushButton::clicked, this, &AnnotationToolbar::onColorButtonClicked);
     return btn;

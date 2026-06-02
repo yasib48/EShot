@@ -19,7 +19,7 @@ EShot is built for quick captures, clean annotations, OCR, uploads, pinned scree
 - Annotation tools: pen, arrow, line, rectangle, ellipse, text, blur, crop, eyedropper, and semi-transparent highlight
 - GIF recording for selected screen areas
 - OCR with bundled Tesseract support and optional language packs
-- Upload support for Catbox and Imgur
+- Upload support for Catbox, Uguu, and Imgur
 - Pin screenshots on top of the desktop
 - Custom global hotkeys
 - Start with Windows through Task Scheduler
@@ -76,7 +76,10 @@ EShot can extract text from a selected area using Tesseract OCR. The installer c
 Upload screenshots directly from the capture toolbar. Supported services:
 
 - Catbox
+- Uguu
 - Imgur
+
+Catbox and Uguu work without an API key. Imgur requires a Client ID.
 
 ### Pin to Desktop
 

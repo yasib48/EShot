@@ -90,10 +90,6 @@ ImageUploader *ImageUploader::create(Provider p, QObject *parent)
         extern ImageUploader *createUguuUploader(QObject *parent);
         return createUguuUploader(parent);
     }
-    case Provider::ZeroXZero: {
-        extern ImageUploader *createZeroXZeroUploader(QObject *parent);
-        return createZeroXZeroUploader(parent);
-    }
     }
     return nullptr;
 }

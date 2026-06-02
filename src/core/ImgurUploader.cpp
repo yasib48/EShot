@@ -41,7 +41,7 @@ void ImgurUploader::upload()
         return;
     }
     if (m_clientId.isEmpty()) {
-        finishWithError(QStringLiteral("Imgur requires a Client ID. Use Catbox, Uguu, or 0x0.st for no-key upload."));
+        finishWithError(QStringLiteral("Imgur requires a Client ID. Use Catbox or Uguu for no-key upload."));
         return;
     }
     if (!hasImage()) {

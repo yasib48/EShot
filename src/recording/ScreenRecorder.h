@@ -47,6 +47,7 @@ private:
     void finishRecording();
     bool flushPendingFrame();
     bool framesEqual(const QImage &a, const QImage &b) const;
+    QString makeDefaultOutputPath() const;
     QImage grabScreenRegion(const QRect &rect);
     QSize boundedOutputSize(const QSize &sourceSize) const;
     bool initCaptureResources();

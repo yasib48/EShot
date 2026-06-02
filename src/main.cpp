@@ -269,15 +269,6 @@ private:
         QAction *captureAction = m_trayMenu->addAction(QIcon(":/icons/copy.svg"), TranslationManager::trayCapture());
         connect(captureAction, &QAction::triggered, this, &EShotApp::onCaptureRequested);
 
-        QAction *recordGifAction = m_trayMenu->addAction(
-            QIcon(":/icons/record.svg"),
-            (m_screenRecorder && m_screenRecorder->isRecording())
-                ? TranslationManager::trayStopRecording()
-                : TranslationManager::trayRecordGif());
-        connect(recordGifAction, &QAction::triggered, this, &EShotApp::onRecordGifRequested);
-
-        m_trayMenu->addSeparator();
-
         if (hasPrintScreenConflict()) {
             QAction *fixPrintScreenAction = m_trayMenu->addAction(
                 QIcon(":/icons/gear.svg"),

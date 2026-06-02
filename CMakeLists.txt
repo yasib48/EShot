@@ -23,7 +23,6 @@ set(SOURCES
     src/core/ImgurUploader.cpp
     src/core/CatboxUploader.cpp
     src/core/UguuUploader.cpp
-    src/core/ZeroXZeroUploader.cpp
     src/capture/CaptureOverlay.cpp
     src/capture/PinnedWindow.cpp
     src/capture/PinManager.cpp
@@ -46,7 +45,6 @@ set(HEADERS
     src/core/ImgurUploader.h
     src/core/CatboxUploader.h
     src/core/UguuUploader.h
-    src/core/ZeroXZeroUploader.h
     src/capture/CaptureOverlay.h
     src/capture/PinnedWindow.h
     src/capture/PinManager.h

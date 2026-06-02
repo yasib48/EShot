@@ -33,7 +33,7 @@ bool GifEncoder::open(const QString &path, int width, int height, int loopCount)
     m_lastError.clear();
     m_file.setFileName(path);
     if (!m_file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        m_lastError = QStringLiteral("cannot open output: ") + path;
+        m_lastError = QStringLiteral("cannot open output: %1 (%2)").arg(path, m_file.errorString());
         return false;
     }
 

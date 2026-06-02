@@ -12,6 +12,7 @@
 #include <QFileInfo>
 #include <QFile>
 #include <QDebug>
+#include <QStringList>
 #include <cstring>
 
 #ifdef Q_OS_WIN
@@ -57,15 +58,8 @@ void ScreenRecorder::start(const QRect &captureRect, int fps, int maxSeconds, in
     }
 
     if (m_outputPath.isEmpty()) {
-        QSettings s("EShot", "EShot");
-        QString dir = s.value("savePath",
-            QStandardPaths::writableLocation(QStandardPaths::PicturesLocation)).toString();
-        if (dir.isEmpty()) dir = QDir::homePath();
-        m_outputPath = QDir(dir).filePath(
-            QStringLiteral("EShot_GIF_%1.gif")
-                .arg(QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss")));
+        m_outputPath = makeDefaultOutputPath();
     }
-    QDir().mkpath(QFileInfo(m_outputPath).absolutePath());
 
     m_encoder = new GifEncoder(this);
     if (!m_encoder->open(m_outputPath, m_outputSize.width(), m_outputSize.height(), loopCount)) {
@@ -104,6 +98,45 @@ void ScreenRecorder::start(const QRect &captureRect, int fps, int maxSeconds, in
     m_countdownTimer->start();
 
     QTimer::singleShot(qMin(250, m_frameTimer->interval()), this, &ScreenRecorder::captureFrame);
+}
+
+QString ScreenRecorder::makeDefaultOutputPath() const
+{
+    QSettings s("EShot", "EShot");
+    QStringList candidates;
+    const QString configuredDir = s.value("savePath").toString().trimmed();
+    if (!configuredDir.isEmpty()) {
+        candidates << configuredDir;
+    }
+    candidates << QStandardPaths::writableLocation(QStandardPaths::PicturesLocation)
+               << QStandardPaths::writableLocation(QStandardPaths::MoviesLocation)
+               << QStandardPaths::writableLocation(QStandardPaths::TempLocation)
+               << QDir::homePath();
+
+    const QString fileName = QStringLiteral("EShot_GIF_%1.gif")
+        .arg(QDateTime::currentDateTime().toString("yyyyMMdd_hhmmss"));
+
+    for (const QString &candidate : candidates) {
+        if (candidate.trimmed().isEmpty()) {
+            continue;
+        }
+
+        QDir dir(candidate);
+        if (!dir.exists() && !dir.mkpath(QStringLiteral("."))) {
+            continue;
+        }
+
+        const QString probePath = dir.filePath(QStringLiteral(".eshot_write_test.tmp"));
+        QFile probe(probePath);
+        if (!probe.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+            continue;
+        }
+        probe.close();
+        QFile::remove(probePath);
+        return dir.filePath(fileName);
+    }
+
+    return QDir(QDir::tempPath()).filePath(fileName);
 }
 
 void ScreenRecorder::stop()

@@ -568,7 +568,7 @@ private:
         {"scrollPressEsc",{"İptal için Esc", "Press Esc to cancel", "Esc zum Abbrechen", "Appuyez sur Esc pour annuler", "Pulse Esc para cancelar", "Esc でキャンセル", "按 Esc 取消", "Esc для отмены"}},
 
         // ─── Yükleme (Upload) ───
-        {"uploadToImgur",  {"Imgur'a Yükle", "Upload to Imgur", "Zu Imgur hochladen", "Téléverser sur Imgur", "Subir a Imgur", "Imgurにアップロード", "上传到 Imgur", "Загрузить в Imgur"}},
+        {"uploadToImgur",  {"Servise Yükle", "Upload to Service", "Zu Dienst hochladen", "Téléverser vers un service", "Subir al servicio", "サービスにアップロード", "上传到服务", "Загрузить в сервис"}},
         {"imgurUploading", {"Yükleniyor...", "Uploading...", "Hochladen...", "Téléversement...", "Subiendo...", "アップロード中...", "上传中...", "Загрузка..."}},
         {"imgurSuccess",   {"Yüklendi!", "Uploaded!", "Hochgeladen!", "Téléversé !", "¡Subido!", "アップロード完了！", "上传成功！", "Загружено!"}},
         {"imgurFailed",    {"Yükleme başarısız", "Upload failed", "Hochladen fehlgeschlagen", "Échec du téléversement", "Error al subir", "アップロード失敗", "上传失败", "Ошибка загрузки"}},
@@ -577,7 +577,7 @@ private:
         {"imgurLinkCopied",{"Bağlantı panoya kopyalandı", "Link copied to clipboard", "Link in die Zwischenablage kopiert", "Lien copié dans le presse-papiers", "Enlace copiado al portapapeles", "リンクをコピーしました", "链接已复制到剪贴板", "Ссылка скопирована в буфер"}},
         {"imgurNoClientId",{"Imgur API anahtarı ayarlanmamış. Ayarlar'dan girin.", "Imgur API key not set. Configure in Settings.", "Imgur API-Schlüssel nicht gesetzt. In Einstellungen.", "Clé API Imgur non configurée. Dans Paramètres.", "Clave API de Imgur no configurada. En Configuración.", "Imgur API キーが未設定です。設定で入力。", "Imgur API 密钥未设置。请在设置中输入。", "API-ключ Imgur не задан. Укажите в настройках."}},
         {"imgurClientId",  {"Imgur Client ID:", "Imgur Client ID:", "Imgur Client-ID:", "ID client Imgur :", "ID de cliente Imgur:", "Imgur クライアント ID:", "Imgur 客户端 ID:", "Imgur Client ID:"}},
-        {"imgurClientIdDesc",{"Imgur Client ID gerekli. Anahtarsız yükleme için Catbox/Uguu/0x0 kullanın.", "Imgur Client ID required. Use Catbox/Uguu/0x0 for no-key upload.", "Imgur Client-ID erforderlich. Ohne Schlüssel Catbox/Uguu/0x0 nutzen.", "ID client Imgur requis. Utilisez Catbox/Uguu/0x0 sans clé.", "Imgur requiere Client ID. Use Catbox/Uguu/0x0 sin clave.", "Imgur Client ID が必要です。キーなしなら Catbox/Uguu/0x0 を使用。", "Imgur 需要 Client ID。无密钥请用 Catbox/Uguu/0x0。", "Imgur требует Client ID. Без ключа используйте Catbox/Uguu/0x0."}},
+        {"imgurClientIdDesc",{"Imgur Client ID gerekli. Anahtarsız yükleme için Catbox/Uguu kullanın.", "Imgur Client ID required. Use Catbox/Uguu for no-key upload.", "Imgur Client-ID erforderlich. Ohne Schlüssel Catbox/Uguu nutzen.", "ID client Imgur requis. Utilisez Catbox/Uguu sans clé.", "Imgur requiere Client ID. Use Catbox/Uguu sin clave.", "Imgur Client ID が必要です。キーなしなら Catbox/Uguu を使用。", "Imgur 需要 Client ID。无密钥请用 Catbox/Uguu。", "Imgur требует Client ID. Без ключа используйте Catbox/Uguu."}},
         {"uploadTitle",    {"Görsel Yükle", "Upload Image", "Bild hochladen", "Téléverser l'image", "Subir imagen", "画像をアップロード", "上传图片", "Загрузить изображение"}},
         {"uploadProvider", {"Servis:", "Service:", "Dienst:", "Service :", "Servicio:", "サービス:", "服务:", "Сервис:"}},
         {"upload",         {"Yükle", "Upload", "Hochladen", "Téléverser", "Subir", "アップロード", "上传", "Загрузить"}},

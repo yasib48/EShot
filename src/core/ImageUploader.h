@@ -15,7 +15,6 @@ public:
         Catbox,
         Imgur,
         Uguu,
-        ZeroXZero,
     };
 
     struct Result {

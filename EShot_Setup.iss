@@ -154,68 +154,6 @@ Filename: "{cmd}"; Parameters: "/C taskkill /F /IM {#MyAppExeName}"; Flags: runh
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command ""Unregister-ScheduledTask -TaskName '{#MyAppName}' -Confirm:$false -ErrorAction SilentlyContinue"""; Flags: runhidden; RunOnceId: "DeleteEShotStartupTask"
 
 [Code]
-var
-  OcrTaskCaptionsUpdated: Boolean;
-
-function InstalledSuffix(): String;
-begin
-  Result := ' (' + CustomMessage('AlreadyInstalled') + ')';
-end;
-
-function AppFileExists(RelPath: String): Boolean;
-begin
-  Result := FileExists(AddBackslash(WizardDirValue) + RelPath);
-end;
-
-procedure MarkTaskAlreadyInstalled(CaptionPart: String);
-var
-  I: Integer;
-  Suffix: String;
-begin
-  Suffix := InstalledSuffix();
-  for I := 0 to WizardForm.TasksList.Items.Count - 1 do
-  begin
-    if (Pos(CaptionPart, WizardForm.TasksList.Items[I]) > 0) and
-       (Pos(Suffix, WizardForm.TasksList.Items[I]) = 0) then
-    begin
-      WizardForm.TasksList.Items[I] := WizardForm.TasksList.Items[I] + Suffix;
-      WizardForm.TasksList.Checked[I] := True;
-      WizardForm.TasksList.ItemEnabled[I] := False;
-    end;
-  end;
-end;
-
-procedure UpdateOcrTaskCaptions();
-begin
-  if OcrTaskCaptionsUpdated then
-    Exit;
-
-  if AppFileExists('tesseract\tesseract.exe') then
-    MarkTaskAlreadyInstalled(CustomMessage('InstallTesseract'));
-  if AppFileExists('tesseract\tessdata\eng.traineddata') then
-    MarkTaskAlreadyInstalled(CustomMessage('OcrLangEnglish'));
-  if AppFileExists('tesseract\tessdata\tur.traineddata') then
-    MarkTaskAlreadyInstalled(CustomMessage('OcrLangTurkish'));
-  if AppFileExists('tesseract\tessdata\rus.traineddata') then
-    MarkTaskAlreadyInstalled(CustomMessage('OcrLangRussian'));
-  if AppFileExists('tesseract\tessdata\deu.traineddata') then
-    MarkTaskAlreadyInstalled(CustomMessage('OcrLangGerman'));
-  if AppFileExists('tesseract\tessdata\fra.traineddata') then
-    MarkTaskAlreadyInstalled(CustomMessage('OcrLangFrench'));
-  if AppFileExists('tesseract\tessdata\spa.traineddata') then
-    MarkTaskAlreadyInstalled(CustomMessage('OcrLangSpanish'));
-  if AppFileExists('tesseract\tessdata\ita.traineddata') then
-    MarkTaskAlreadyInstalled(CustomMessage('OcrLangItalian'));
-
-  OcrTaskCaptionsUpdated := True;
-end;
-
-procedure CurPageChanged(CurPageID: Integer);
-begin
-  if CurPageID = wpSelectTasks then
-    UpdateOcrTaskCaptions();
-end;
-
 function PrepareToInstall(var NeedsRestart: Boolean): String;
 var
   ResultCode: Integer;

@@ -2,6 +2,8 @@
 #include "PinnedWindow.h"
 #include "annotation/AnnotationEngine.h"
 #include "ui/AnnotationToolbar.h"
+#include "ui/OcrDialog.h"
+#include "ui/UploadDialog.h"
 
 #include "../core/TranslationManager.h"
 
@@ -21,6 +23,7 @@
 #include <QDir>
 #include <QPointer>
 #include <QRegularExpression>
+#include <QCoreApplication>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -43,6 +46,7 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
     , m_foregroundHwnd(nullptr)
     , m_isDraggingAnnotation(false)
     , m_textJustCommitted(false)
+    , m_textEditing(false)
     , m_eyedropperActive(false)
     , m_selectionLocked(false)
 {
@@ -51,7 +55,7 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
     setMouseTracking(true);
     setCursor(Qt::CrossCursor);
 
-    // Metin editörü (çoklu satır desteği)
+    // Text editor (multi-line support)
     m_textEdit = new QTextEdit(this);
     m_textEdit->setAcceptRichText(false);
     m_textEdit->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
@@ -70,7 +74,7 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
     m_textEdit->hide();
     m_textEdit->installEventFilter(this);
     connect(m_textEdit, &QTextEdit::textChanged, this, [this]() {
-        // Otomatik yükseklik ayarı
+        // Auto height adjust
         if (m_textEdit && m_textEdit->isVisible()) {
             QTextDocument *doc = m_textEdit->document();
             QSizeF size = doc->size();
@@ -102,6 +106,9 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
     });
     connect(m_toolbar, &AnnotationToolbar::eyedropperRequested, this, &CaptureOverlay::onEyedropperRequested);
     connect(m_toolbar, &AnnotationToolbar::lockToggled, this, &CaptureOverlay::onSelectionLockToggled);
+    connect(m_toolbar, &AnnotationToolbar::ocrRequested, this, &CaptureOverlay::onOcrRequested);
+    connect(m_toolbar, &AnnotationToolbar::uploadRequested, this, &CaptureOverlay::onUploadRequested);
+    connect(m_toolbar, &AnnotationToolbar::gifRequested, this, &CaptureOverlay::onGifRequested);
     connect(m_annotationEngine, &AnnotationEngine::annotationAdded, this, &CaptureOverlay::updateUndoRedoState);
 
     m_actionPanel = new QWidget(this);
@@ -166,10 +173,10 @@ CaptureOverlay::~CaptureOverlay() {}
 
 void CaptureOverlay::refreshUI()
 {
-    // Toolbar buton tooltip'lerini güncelle
+    // Refresh toolbar button tooltips
     if (m_toolbar) m_toolbar->refreshToolTips();
 
-    // Action panel buton tooltip'lerini güncelle
+    // Refresh action panel button tooltips
     if (m_actionPanel) {
         QList<QPushButton*> buttons = m_actionPanel->findChildren<QPushButton*>();
         QStringList tips = {
@@ -184,8 +191,38 @@ void CaptureOverlay::refreshUI()
     }
 }
 
+void CaptureOverlay::prewarm()
+{
+    // Force initial paint of overlay + toolbar + action panel at startup
+    // so the first user-triggered capture does not stall on first-render
+    // composition (~2-3 s on Windows for translucent frameless widgets).
+    if (!isVisible()) {
+        setGeometry(-10000, -10000, 800, 220);
+        show();
+        if (m_toolbar) {
+            m_toolbar->adjustSize();
+            m_toolbar->move(20, 20);
+            m_toolbar->show();
+        }
+        if (m_actionPanel) {
+            m_actionPanel->adjustSize();
+            m_actionPanel->move(20, 90);
+            m_actionPanel->show();
+        }
+        QCoreApplication::processEvents();
+        if (m_toolbar) m_toolbar->grab();
+        if (m_actionPanel) m_actionPanel->grab();
+        QCoreApplication::processEvents();
+        if (m_toolbar) m_toolbar->hide();
+        if (m_actionPanel) m_actionPanel->hide();
+        hide();
+    }
+}
+
 void CaptureOverlay::startCapture()
 {
+    if (m_captureDelayTimer) m_captureDelayTimer->stop();
+    m_captureMode = ModeNormal;
     m_isSelecting = false;
     m_selectionComplete = false;
     m_ignoreNextMouseRelease = false;
@@ -200,12 +237,10 @@ void CaptureOverlay::startCapture()
     if (m_annotationEngine) m_annotationEngine->clear();
     hideToolbar();
 
-    // Overlay'den önce aktif pencereyi kaydet (%T dosya adı değişkeni için)
-#ifdef Q_OS_WIN
+    // Save foreground window before overlay (for %T filename variable)
     m_foregroundHwnd = GetForegroundWindow();
-#endif
 
-    // Ayarları yükle
+    // Load settings
     QSettings s("EShot", "EShot");
     if (m_toolbar) {
         m_toolbar->refreshTools();
@@ -217,7 +252,7 @@ void CaptureOverlay::startCapture()
     m_copyAfterCapture = s.value("copyAfterCapture", true).toBool();
     m_closeAfterCopy = s.value("closeAfterCopy", true).toBool();
 
-    // Bulanıklık şiddeti ayarını yükle
+    // Load blur strength setting
     int blurIntensity = s.value("blurIntensity", 16).toInt();
     if (m_annotationEngine) m_annotationEngine->setBlurIntensity(blurIntensity);
     if (m_toolbar) m_toolbar->setBlurIntensity(blurIntensity);
@@ -229,11 +264,18 @@ void CaptureOverlay::startCapture()
         performCapture();
 }
 
+void CaptureOverlay::startCaptureForRecording()
+{
+    startCapture();
+    m_captureMode = ModeRecording;
+    setCursor(Qt::CrossCursor);
+}
+
 void CaptureOverlay::performCapture()
 {
     captureAllScreens();
 
-    // Ekran görüntüsünü annotation engine'a aktar (blur efekti için)
+    // Pass screenshot to annotation engine (for blur effect)
     if (m_annotationEngine)
         m_annotationEngine->setScreenSnapshot(m_screenSnapshot);
 
@@ -340,7 +382,7 @@ void CaptureOverlay::paintEvent(QPaintEvent *event)
     QRect selRect = normalizedSelectionRect();
 
     if (!selRect.isEmpty()) {
-        // Temiz alan
+        // Clean area
         painter.setCompositionMode(QPainter::CompositionMode_Source);
         painter.drawPixmap(selRect, m_screenSnapshot, selRect);
         painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
@@ -352,13 +394,12 @@ void CaptureOverlay::paintEvent(QPaintEvent *event)
             painter.setClipping(false);
         }
 
-        // Çerçeve
-        QPen borderPen(QColor(0, 122, 204), 2);
-        painter.setPen(borderPen);
-        painter.setBrush(Qt::NoBrush);
-        painter.drawRect(selRect);
+    // Frame
+    painter.setPen(QPen(QColor(0, 120, 215), 2));
+    painter.setBrush(Qt::NoBrush);
+    painter.drawRect(selRect);
 
-        // Köşe tutamakları
+    // Corner handles
         int hs = 5; // Handle size radius
         QColor hc(255, 255, 255);
         QColor hbc(0, 122, 204);
@@ -375,7 +416,7 @@ void CaptureOverlay::paintEvent(QPaintEvent *event)
         drawHandle(selRect.bottomLeft());
         drawHandle(selRect.bottomRight());
 
-        // Boyut bilgisi — her zaman görünür (seçim sol üstünde)
+        // Size info — always visible (top-left of selection)
         if (m_isSelecting || m_selectionComplete) {
             QString dim = QString("%1 x %2").arg(selRect.width()).arg(selRect.height());
             QFont f = painter.font(); f.setPointSize(10); f.setBold(true);
@@ -409,7 +450,7 @@ void CaptureOverlay::paintEvent(QPaintEvent *event)
         painter.drawLine(0, cur.y(), width(), cur.y());
     }
 
-    // Eyedropper: renk önizleme daire
+    // Eyedropper: color preview circle
     if (m_eyedropperActive) {
         QPoint cur = mapFromGlobal(QCursor::pos());
         if (rect().contains(cur)) {
@@ -419,11 +460,11 @@ void CaptureOverlay::paintEvent(QPaintEvent *event)
                 pixelColor = QColor(img.pixel(cur));
             }
             if (pixelColor.isValid()) {
-                // Daire
+                // Circle
                 painter.setPen(QPen(Qt::white, 2));
                 painter.setBrush(pixelColor);
                 painter.drawEllipse(cur, 12, 12);
-                // Renk kodu etiketi
+                // Color code label
                 QString colorName = pixelColor.name().toUpper();
                 QFont f = painter.font(); f.setPointSize(9); f.setBold(true);
                 painter.setFont(f);
@@ -452,14 +493,14 @@ void CaptureOverlay::mousePressEvent(QMouseEvent *event)
         if (m_actionPanel && m_actionPanel->isVisible() && m_actionPanel->geometry().contains(event->pos()))
             return;
 
-        // Eyedropper modunda tıklama — renk al ve normale dön
+        // Eyedropper click — pick color and return to normal mode
         if (m_eyedropperActive) {
             if (m_screenSnapshot.rect().contains(event->pos())) {
                 QImage img = m_screenSnapshot.toImage();
                 QColor c = QColor(img.pixel(event->pos()));
                 if (c.isValid()) {
                     if (m_annotationEngine) m_annotationEngine->setColor(c);
-                    // Toolbar'daki renk butonunu güncelle
+                    // Update color button in toolbar
                     if (m_toolbar) m_toolbar->setColor(c);
                 }
             }
@@ -476,7 +517,7 @@ void CaptureOverlay::mousePressEvent(QMouseEvent *event)
             
             bool isDrawingTool = (m_annotationEngine && m_annotationEngine->currentTool() != AnnotationEngine::None);
             
-            // Araç seçili değilken annotation tıklama → taşıma modu
+            // Annotation click while no tool is selected → move mode
             if (mode == ResNone && m_annotationEngine && selRect.contains(event->pos())) {
                 QPoint rel = event->pos() - selRect.topLeft();
                 int idx = m_annotationEngine->findAnnotationAt(rel);
@@ -511,7 +552,7 @@ void CaptureOverlay::mousePressEvent(QMouseEvent *event)
             }
             
             if (selRect.contains(event->pos())) {
-                // Seçim alanında tıklama — mevcut seçimi taşı
+                // Click in selection area — move current selection
             } else {
                 m_selectionComplete = false;
                 m_isSelecting = true;
@@ -523,7 +564,7 @@ void CaptureOverlay::mousePressEvent(QMouseEvent *event)
                 update();
             }
         } else if (m_selectionComplete && m_selectionLocked) {
-            // Seçim kilitli — sadece annotation çizimine izin ver
+            // Selection locked — allow annotation drawing only
             QRect selRect = normalizedSelectionRect();
             bool isDrawingTool = (m_annotationEngine && m_annotationEngine->currentTool() != AnnotationEngine::None);
             if (isDrawingTool && selRect.contains(event->pos())) {
@@ -539,7 +580,7 @@ void CaptureOverlay::mousePressEvent(QMouseEvent *event)
         }
     } else if (event->button() == Qt::RightButton) {
         if (m_eyedropperActive) {
-            // Eyedropper iptal
+            // Eyedropper cancel
             m_eyedropperActive = false;
             setCursor(Qt::CrossCursor);
             update();
@@ -575,31 +616,31 @@ void CaptureOverlay::mouseDoubleClickEvent(QMouseEvent *event)
 
 void CaptureOverlay::mouseMoveEvent(QMouseEvent *event)
 {
-    // Eyedropper modunda — sadece repaint
+    // In Eyedropper mode — only repaint
     if (m_eyedropperActive) {
         update();
         return;
     }
 
-    // Annotation taşıma (snap-to-edge ile)
+    // Annotation move (with snap-to-edge)
     if (m_isDraggingAnnotation && m_annotationEngine && m_annotationEngine->selectedIndex() >= 0) {
         QRect selRect = normalizedSelectionRect();
         QPoint rel = event->pos() - selRect.topLeft();
         QPoint delta = rel - m_dragAnnotationStart;
         if (!delta.isNull()) {
-            // Snap-to-edge: kenara 8px yakınsa yapıştır
+            // Snap-to-edge: snap if within 8px of edge
             int snapThreshold = 8;
             QRect annBounds = m_annotationEngine->boundingRectOf(m_annotationEngine->selectedIndex());
             if (!annBounds.isEmpty()) {
                 QPoint newPos = annBounds.topLeft() + delta;
-                // Sol kenara snap
+                // Snap to left edge
                 if (qAbs(newPos.x()) < snapThreshold) delta.setX(-annBounds.left());
-                // Sağ kenara snap
+                // Snap to right edge
                 if (qAbs(newPos.x() + annBounds.width() - selRect.width()) < snapThreshold)
                     delta.setX(selRect.width() - annBounds.width() - annBounds.left());
-                // Üst kenara snap
+                // Snap to top edge
                 if (qAbs(newPos.y()) < snapThreshold) delta.setY(-annBounds.top());
-                // Alt kenara snap
+                // Snap to bottom edge
                 if (qAbs(newPos.y() + annBounds.height() - selRect.height()) < snapThreshold)
                     delta.setY(selRect.height() - annBounds.height() - annBounds.top());
             }
@@ -617,14 +658,11 @@ void CaptureOverlay::mouseMoveEvent(QMouseEvent *event)
             QPoint newTopLeft = event->pos() - m_moveOffset;
             
             int w = oldSel.width();
-            int h = oldSel.height(); // Assuming h is also defined, as it's used below.
-            // Ekran sınırları
-            newTopLeft.setX(qBound(0, newTopLeft.x(), width() - w));
-            newTopLeft.setY(qBound(0, newTopLeft.y(), height() - h));
-
+            int h = oldSel.height();
+            QRect bounds = m_screenSnapshot.rect();
+            newTopLeft.setX(qBound(bounds.left(), newTopLeft.x(), bounds.right() - w + 1));
+            newTopLeft.setY(qBound(bounds.top(), newTopLeft.y(), bounds.bottom() - h + 1));
             m_selectionStart = newTopLeft;
-            // QRect(p1, p2) yapıcı width = p2.x - p1.x + 1 mantığıyla çalışır.
-            // Bu yüzden aynı boyutu korumak için 1 çıkarmalıyız.
             m_selectionEnd = newTopLeft + QPoint(w - 1, h - 1);
         } 
         else if (m_resizeMode == ResTopLeft) {
@@ -642,6 +680,8 @@ void CaptureOverlay::mouseMoveEvent(QMouseEvent *event)
             m_selectionEnd = event->pos();
         }
 
+        if (m_selectionComplete && m_toolbar && m_toolbar->isVisible())
+            showToolbar();
         update();
         return;
     }
@@ -677,7 +717,7 @@ void CaptureOverlay::mouseReleaseEvent(QMouseEvent *event)
             return;
         }
 
-        // Annotation taşıma sonlandır
+        // Annotation move end
         if (m_isDraggingAnnotation) {
             m_isDraggingAnnotation = false;
             if (m_annotationEngine) m_annotationEngine->setSelectedIndex(-1);
@@ -699,14 +739,14 @@ void CaptureOverlay::mouseReleaseEvent(QMouseEvent *event)
             QRect selRect = normalizedSelectionRect();
             if (selRect.width() > 10 && selRect.height() > 10) {
                 m_selectionComplete = true;
+
+                if (m_captureMode == ModeRecording) {
+                    finishCapture();
+                    return;
+                }
+
                 showToolbar();
                 updateUndoRedoState();
-                // copyAfterCapture aktifse otomatik kopyala
-                if (m_copyAfterCapture) {
-                    QPixmap result = getSelectedPixmap();
-                    if (!result.isNull())
-                        QGuiApplication::clipboard()->setPixmap(result);
-                }
             }
             update();
         } else if (m_selectionComplete) {
@@ -751,14 +791,13 @@ void CaptureOverlay::keyPressEvent(QKeyEvent *event)
     }
 
     if (event->key() == Qt::Key_Escape) {
-        // Eyedropper aktifse sadece onu kapat
-        if (m_eyedropperActive) {
-            m_eyedropperActive = false;
-            setCursor(Qt::CrossCursor);
-            update();
-            return;
-        }
-        // Text edit açıksa sadece onu kapat
+    // If eyedropper is active, just close it
+    if (m_eyedropperActive) {
+        m_eyedropperActive = false;
+        update();
+        return;
+    }
+    // If text edit is open, just close it
         if (m_textEdit && m_textEdit->isVisible()) {
             m_textEdit->hide();
             m_textJustCommitted = false;
@@ -786,13 +825,13 @@ void CaptureOverlay::keyPressEvent(QKeyEvent *event)
     } else if (event->matches(QKeySequence::Redo)) {
         if (m_annotationEngine) { m_annotationEngine->redo(); update(); updateUndoRedoState(); }
     } else if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) {
-        // Text edit açıksa ve Shift basılıysa yeni satır ekle
+        // If text edit is open and Shift is held, insert newline
         if (m_textEdit && m_textEdit->isVisible()) {
             if (event->modifiers() & Qt::ShiftModifier) {
                 m_textEdit->insertPlainText("\n");
                 return;
             }
-            // Text edit kapatıldıysa Enter'ı yut
+            // If text edit was just closed, swallow Enter
             commitText();
             return;
         }
@@ -802,12 +841,12 @@ void CaptureOverlay::keyPressEvent(QKeyEvent *event)
         }
         if (m_selectionComplete) onCopyToClipboard();
     } else if (m_selectionComplete && m_annotationEngine) {
-        // Eyedropper kısayolu
+        // Eyedropper shortcut
         if (event->key() == Qt::Key_I && !(event->modifiers() & (Qt::ControlModifier | Qt::AltModifier))) {
             onEyedropperRequested();
             return;
         }
-        // Araç kısayol tuşları
+        // Tool shortcut keys
         int toolId = AnnotationEngine::None;
         switch (event->key()) {
             case Qt::Key_P: toolId = AnnotationEngine::Pen; break;
@@ -825,7 +864,7 @@ void CaptureOverlay::keyPressEvent(QKeyEvent *event)
         }
         if (toolId != AnnotationEngine::None) {
             m_annotationEngine->setCurrentTool(static_cast<AnnotationEngine::Tool>(toolId));
-            // Toolbar'daki seçimi güncelle
+            // Update selection in toolbar
             if (m_toolbar) m_toolbar->selectTool(toolId);
         }
     }
@@ -843,14 +882,16 @@ bool CaptureOverlay::eventFilter(QObject *obj, QEvent *event)
     if (obj == m_textEdit && event->type() == QEvent::KeyPress) {
         QKeyEvent *ke = static_cast<QKeyEvent*>(event);
         if (ke->key() == Qt::Key_Return || ke->key() == Qt::Key_Enter) {
+            // Shift+Enter → newline
             if (ke->modifiers() & Qt::ShiftModifier) {
-                // Shift+Enter → yeni satır
                 m_textEdit->insertPlainText("\n");
-            } else {
-                // Enter → doğrudan onayla
-                commitText();
+                return true;
             }
-            return true; // olayı tüket
+            // Enter → confirm directly
+            m_textEdit->clearFocus();
+            m_textEdit->hide();
+            m_textEditing = false;
+            return true; // consume event
         }
     }
     return QWidget::eventFilter(obj, event);
@@ -891,7 +932,7 @@ QString CaptureOverlay::resolveFilenamePattern(const QString &pattern) const
 QString CaptureOverlay::resolveWindowTitle() const
 {
 #ifdef Q_OS_WIN
-    // Kaydedilmiş aktif pencereyi kullan (overlay gösterilmeden önceki)
+    // Use saved foreground window (the one active before overlay)
     HWND hwnd = m_foregroundHwnd;
     if (!hwnd) hwnd = GetForegroundWindow();
     if (hwnd) {
@@ -913,23 +954,24 @@ void CaptureOverlay::showToolbar()
     QRect selRect = normalizedSelectionRect();
     int margin = 12;
 
-    // --- Alt toolbar: seçimin altında, ortalanmış ---
-    int th = m_toolbar->sizeHint().height();
-    int toolbarWidth = m_toolbar->sizeHint().width();
-    int minToolbarWidth = toolbarWidth; // Butonların sığıdığı minimum
+    // --- Bottom toolbar: below the selection, centered ---
+    m_toolbar->adjustSize();
+    int th = m_toolbar->height();
+    int toolbarWidth = m_toolbar->width();
+    int minToolbarWidth = toolbarWidth; // Minimum width for buttons
 
     int tx = selRect.center().x() - toolbarWidth / 2;
     int ty = selRect.bottom() + margin;
 
-    // Ekran sınırları kontrolü
+    // Check screen bounds
     if (tx < 5) tx = 5;
     if (tx + toolbarWidth > width() - 5) tx = width() - toolbarWidth - 5;
     if (ty + th > height() - 5) {
-        // Altına sığmıyorsa üste dene
+        // If it does not fit below, try above
         ty = selRect.top() - th - margin;
     }
     if (ty < 5) {
-        // Üste de sığmıyorsa çerçevenin içine, alta yapışık koy
+        // If it also does not fit above, dock to bottom inside the frame
         ty = selRect.bottom() - th - 2;
     }
 
@@ -938,7 +980,7 @@ void CaptureOverlay::showToolbar()
     m_toolbar->show();
     m_toolbar->raise();
 
-    // --- Sağ panel: seçimin sağında, dikey olarak ortalanmış ---
+    // --- Right panel: right of selection, vertically centered ---
     if (m_actionPanel) {
         m_actionPanel->adjustSize();
         int pw = m_actionPanel->width();
@@ -946,17 +988,17 @@ void CaptureOverlay::showToolbar()
         int px = selRect.right() + margin;
         int py = selRect.center().y() - ph / 2;
 
-        // Sağa sığmıyorsa sola dene
+        // If it does not fit to the right, try left
         if (px + pw > width() - 5)
             px = selRect.left() - pw - margin;
 
-        // Sola da sığmıyorsa çerçevenin içine, sağa yapışık koy
+        // If it also does not fit left, dock to right inside the frame
         if (px < 5) {
             px = selRect.right() - pw - 2;
             py = selRect.top() + 5;
         }
 
-        // Üst-alt sınırları kontrolü (çerçeve içindeyken)
+        // Check top/bottom bounds (when inside the frame)
         if (py < selRect.top() + 2) py = selRect.top() + 2;
         if (py + ph > selRect.bottom() - 2) py = selRect.bottom() - ph - 2;
 
@@ -974,12 +1016,19 @@ void CaptureOverlay::hideToolbar()
 
 void CaptureOverlay::finishCapture()
 {
+    QRect selRect = normalizedSelectionRect();
     QPixmap result = getSelectedPixmap();
     hide();
     m_selectionComplete = false;
     m_isSelecting = false;
 
-    // Ses çal (ayar aktifse)
+    if (m_captureMode == ModeRecording) {
+        m_captureMode = ModeNormal;
+        if (!selRect.isEmpty()) emit regionSelected(selRect);
+        return;
+    }
+
+    // Play sound (if setting is enabled)
     QSettings s("EShot", "EShot");
     if (s.value("playSound", false).toBool()) {
 #ifdef Q_OS_WIN
@@ -1047,9 +1096,46 @@ void CaptureOverlay::onSelectionLockToggled(bool locked)
 void CaptureOverlay::onBlurIntensityChanged(int intensity)
 {
     if (m_annotationEngine) m_annotationEngine->setBlurIntensity(intensity);
-    // Ayarlara kaydet
+    // Save to settings
     QSettings s("EShot", "EShot");
     s.setValue("blurIntensity", intensity);
+}
+
+void CaptureOverlay::onOcrRequested()
+{
+    QPixmap pix = getSelectedPixmap();
+    if (pix.isNull()) return;
+    QSettings s("EShot", "EShot");
+    QString lang = s.value("ocrLanguage", "en-US").toString();
+    hide();
+    OcrDialog dlg(pix);
+    dlg.setLanguageTag(lang);
+    dlg.exec();
+    show();
+}
+
+void CaptureOverlay::onUploadRequested()
+{
+    QPixmap pix = getSelectedPixmap();
+    if (pix.isNull()) return;
+    hide();
+    UploadDialog dlg;
+    dlg.setImage(pix);
+    dlg.exec();
+    show();
+}
+
+void CaptureOverlay::onGifRequested()
+{
+    QRect selRect = normalizedSelectionRect();
+    if (selRect.isEmpty()) return;
+    QRect screenRect = selRect.translated(m_virtualDesktopRect.topLeft());
+    hide();
+    m_selectionComplete = false;
+    m_isSelecting = false;
+    if (m_toolbar) m_toolbar->hide();
+    if (m_actionPanel) m_actionPanel->hide();
+    emit gifCaptureRequested(screenRect);
 }
 
 QRect CaptureOverlay::normalizedSelectionRect() const
@@ -1109,15 +1195,14 @@ void CaptureOverlay::selectMonitorAt(const QPoint &pos)
     m_selectionStart = monitorRect.topLeft();
     m_selectionEnd = monitorRect.bottomRight();
 
+    if (m_captureMode == ModeRecording) {
+        finishCapture();
+        return;
+    }
+
     showToolbar();
     updateUndoRedoState();
     updateCursor(pos);
-
-    if (m_copyAfterCapture) {
-        QPixmap result = getSelectedPixmap();
-        if (!result.isNull())
-            QGuiApplication::clipboard()->setPixmap(result);
-    }
 
     update();
 }
@@ -1137,7 +1222,7 @@ void CaptureOverlay::onCopyToClipboard()
     if (result.isNull()) return;
     QGuiApplication::clipboard()->setPixmap(result);
 
-    // closeAfterCopy aktifse overlay'i kapat
+    // Close overlay if closeAfterCopy is enabled
     if (m_closeAfterCopy) {
         finishCapture();
     }
@@ -1149,28 +1234,38 @@ void CaptureOverlay::onSave()
     if (result.isNull()) return;
 
     QSettings s("EShot", "EShot");
+    QString cliFullPath = s.value("cliSaveFullPath").toString();
+    s.remove("cliSaveFullPath");
     QString path = s.value("savePath",
         QStandardPaths::writableLocation(QStandardPaths::PicturesLocation)).toString();
+    if (path.trimmed().isEmpty())
+        path = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
     QString format = s.value("imageFormat", "PNG").toString();
     int quality = s.value("imageQuality", 95).toInt();
     QString pattern = s.value("filenamePattern", "Screenshot_%Y-%M-%D_%h-%m-%s").toString();
+    if (pattern.trimmed().isEmpty())
+        pattern = QStringLiteral("Screenshot_%Y-%M-%D_%h-%m-%s");
     bool copyPathAfterSave = s.value("copyPathAfterSave", false).toBool();
 
-    QDir dir(path);
-    if (!dir.exists()) dir.mkpath(".");
+    QString filename;
+    if (!cliFullPath.isEmpty()) {
+        filename = cliFullPath;
+    } else {
+        QDir dir(path);
+        if (!dir.exists()) dir.mkpath(".");
 
-    QString ext = format.toLower();
-    if (ext == "jpeg") ext = "jpg";
+        QString ext = format.toLower();
+        if (ext == "jpeg") ext = "jpg";
 
-    QString baseName = resolveFilenamePattern(pattern);
-    QString filename = QString("%1/%2.%3").arg(path, baseName, ext);
+        QString baseName = resolveFilenamePattern(pattern);
+        filename = QString("%1/%2.%3").arg(path, baseName, ext);
 
-    // Aynı isimde dosya varsa numara ekle
-    if (QFile::exists(filename)) {
-        int counter = 1;
-        while (QFile::exists(QString("%1/%2_%3.%4").arg(path, baseName, QString::number(counter), ext)))
-            counter++;
-        filename = QString("%1/%2_%3.%4").arg(path, baseName, QString::number(counter), ext);
+        if (QFile::exists(filename)) {
+            int counter = 1;
+            while (QFile::exists(QString("%1/%2_%3.%4").arg(path, baseName, QString::number(counter), ext)))
+                counter++;
+            filename = QString("%1/%2_%3.%4").arg(path, baseName, QString::number(counter), ext);
+        }
     }
 
     bool saved = false;
@@ -1181,6 +1276,7 @@ void CaptureOverlay::onSave()
 
     if (saved) {
         qDebug() << "[CaptureOverlay] Saved:" << filename;
+        emit captureSaved(filename);
         if (copyPathAfterSave) {
             QGuiApplication::clipboard()->setText(QDir::toNativeSeparators(filename));
         }
@@ -1248,7 +1344,7 @@ void CaptureOverlay::updateCursor(const QPoint &pos)
             if (m_annotationEngine && m_annotationEngine->currentTool() == AnnotationEngine::None)
                 setCursor(Qt::SizeAllCursor);
             else
-                setCursor(Qt::CrossCursor); // Çizim için
+                setCursor(Qt::CrossCursor); // For drawing
             break;
         default:
             setCursor(Qt::ArrowCursor);

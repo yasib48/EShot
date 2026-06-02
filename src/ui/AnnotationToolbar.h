@@ -35,6 +35,9 @@ signals:
     void blurIntensityChanged(int intensity);
     void eyedropperRequested();
     void lockToggled(bool locked);
+    void ocrRequested();
+    void uploadRequested();
+    void gifRequested();
 
 private slots:
     void onToolButtonClicked();
@@ -65,21 +68,26 @@ private:
     QColor m_currentColor;
     QStringList m_visibleTools;
 
-    // Yeni: Eyedropper
+    // New: Eyedropper
     QPushButton *m_eyedropperButton;
 
-    // Yeni: Seçim kilidi
+    // New: Selection lock
     QPushButton *m_lockButton;
     bool m_selectionLocked;
 
-    // Yeni: Bulanıklık şiddeti
+    // New: Blur strength
     QSlider *m_blurIntensitySlider;
     QLabel *m_blurIntensityLabel;
     QWidget *m_blurIntensityWidget;
 
-    // Geri al/İleri al buton referansları
+    // Undo/Redo button references
     QPushButton *m_undoButton;
     QPushButton *m_redoButton;
+
+    // OCR and upload
+    QPushButton *m_ocrButton;
+    QPushButton *m_uploadButton;
+    QPushButton *m_gifButton;
 };
 
 #endif

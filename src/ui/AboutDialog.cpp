@@ -11,6 +11,16 @@
 #include <QJsonObject>
 #include <QPainter>
 #include <QIcon>
+#include <QVersionNumber>
+
+static bool isNewerVersion(const QString &latest, const QString &current)
+{
+    QVersionNumber latestVersion = QVersionNumber::fromString(latest.trimmed());
+    QVersionNumber currentVersion = QVersionNumber::fromString(current.trimmed());
+    if (latestVersion.isNull() || currentVersion.isNull())
+        return latest.trimmed() != current.trimmed();
+    return QVersionNumber::compare(latestVersion, currentVersion) > 0;
+}
 
 AboutDialog::AboutDialog(QWidget *parent) : QDialog(parent)
 {
@@ -40,7 +50,7 @@ void AboutDialog::setupUI()
     iconLabel->setAlignment(Qt::AlignCenter);
     layout->addWidget(iconLabel);
 
-    // İsim
+    // Name
     QLabel *nameLabel = new QLabel("EShot");
     QFont nameFont = nameLabel->font();
     nameFont.setPointSize(18);
@@ -50,19 +60,19 @@ void AboutDialog::setupUI()
     nameLabel->setStyleSheet("color: #ffffff;");
     layout->addWidget(nameLabel);
 
-    // Sürüm
+    // Version
     QLabel *verLabel = new QLabel(QString("%1 %2").arg(TranslationManager::version(), QApplication::applicationVersion()));
     verLabel->setAlignment(Qt::AlignCenter);
     verLabel->setStyleSheet("color: #999999; font-size: 11px; margin-bottom: 2px;");
     layout->addWidget(verLabel);
 
-    // Tanım
+    // Description
     QLabel *descLabel = new QLabel(TranslationManager::aboutDesc());
     descLabel->setAlignment(Qt::AlignCenter);
     descLabel->setStyleSheet("color: #bbbbbb; font-size: 12px;");
     layout->addWidget(descLabel);
 
-    // GitHub linki
+    // GitHub link
     QLabel *linkLabel = new QLabel(
         "<a href='https://github.com/Benoks/EShot' style='color: #5B9BD5; text-decoration: none;'>"
         "GitHub</a>"
@@ -74,14 +84,14 @@ void AboutDialog::setupUI()
 
     layout->addStretch();
 
-    // Güncelleme durumu
+    // Update status
     QLabel *updateStatusLabel = new QLabel();
     updateStatusLabel->setAlignment(Qt::AlignCenter);
     updateStatusLabel->setStyleSheet("color: #888888; font-size: 11px;");
     updateStatusLabel->setMinimumHeight(14);
     layout->addWidget(updateStatusLabel);
 
-    // Güncelleme kontrolü
+    // Update check
     QPushButton *checkUpdateBtn = new QPushButton(TranslationManager::checkForUpdates());
     checkUpdateBtn->setCursor(Qt::PointingHandCursor);
     checkUpdateBtn->setFixedHeight(32);
@@ -113,7 +123,7 @@ void AboutDialog::setupUI()
                     if (latestTag.startsWith("v") || latestTag.startsWith("V"))
                         latestTag = latestTag.mid(1);
                     QString currentVersion = QApplication::applicationVersion();
-                    if (!latestTag.isEmpty() && latestTag != currentVersion) {
+                    if (!latestTag.isEmpty() && isNewerVersion(latestTag, currentVersion)) {
                         updateStatusLabel->setText(TranslationManager::updateMessage(latestTag));
                         updateStatusLabel->setStyleSheet("color: #ff9800; font-size: 11px;");
                     } else {
@@ -134,7 +144,7 @@ void AboutDialog::setupUI()
     });
     layout->addWidget(checkUpdateBtn);
 
-    // Kapat
+    // Close
     QPushButton *closeBtn = new QPushButton(TranslationManager::cancel());
     closeBtn->setCursor(Qt::PointingHandCursor);
     closeBtn->setFixedHeight(32);

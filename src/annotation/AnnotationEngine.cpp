@@ -225,7 +225,7 @@ void AnnotationEngine::drawAnnotation(QPainter *painter, const Annotation &ann, 
         doc.setPlainText(ann.text);
         QSizeF docSize = doc.size();
 
-        // Arka plan
+        // Background
         QRect bg(tp.x() - 4, tp.y() - 4,
                  static_cast<int>(docSize.width()) + 8,
                  static_cast<int>(docSize.height()) + 8);
@@ -233,7 +233,7 @@ void AnnotationEngine::drawAnnotation(QPainter *painter, const Annotation &ann, 
         painter->setBrush(QColor(0, 0, 0, 120));
         painter->drawRoundedRect(bg, 3, 3);
 
-        // Metin
+        // Text
         painter->save();
         painter->translate(tp);
         QAbstractTextDocumentLayout *layout = doc.documentLayout();
@@ -377,7 +377,7 @@ int AnnotationEngine::findAnnotationAt(const QPoint &pos)
             bounds = QRect(ann.points.first(), QSize(20, 20));
             bounds.moveCenter(ann.points.first());
         } else {
-            // Tüm noktaları kapsayan bounds hesapla
+            // Compute bounding box covering all points
             int minX = INT_MAX, minY = INT_MAX, maxX = INT_MIN, maxY = INT_MIN;
             for (const QPoint &p : ann.points) {
                 minX = qMin(minX, p.x());
@@ -451,7 +451,7 @@ void AnnotationEngine::drawBlurEffect(QPainter *painter, const QRect &rect, cons
         return;
     }
 
-    // Final capture: painter bir QPixmap üzerine çiziyor
+    // Final capture: painter draws on a QPixmap
     QPixmap *dev = dynamic_cast<QPixmap*>(painter->device());
     if (dev) {
         QRect clamped = target.intersected(dev->rect());
@@ -471,7 +471,7 @@ void AnnotationEngine::drawBlurEffect(QPainter *painter, const QRect &rect, cons
         }
     }
 
-    // Canlı önizleme: m_screenSnapshot'tan al
+    // Live preview: take from m_screenSnapshot
     if (!m_screenSnapshot.isNull()) {
         QRect sourceRect = target;
         QRect clamped = sourceRect.intersected(m_screenSnapshot.rect());
@@ -491,7 +491,7 @@ void AnnotationEngine::drawBlurEffect(QPainter *painter, const QRect &rect, cons
         }
     }
 
-    // Fallback: gri dolgu
+    // Fallback: gray fill
     painter->fillRect(target, QColor(128, 128, 128, 180));
     painter->restore();
 }

@@ -1,169 +1,168 @@
 # EShot
 
-A fast, lightweight screenshot tool for Windows with annotation tools, pin-to-desktop, and multi-monitor support.
+Fast, lightweight screenshot and annotation tool for Windows.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/Platform-Windows%2010%2F11-blue.svg)]()
-[![Qt](https://img.shields.io/badge/Qt-6.8-green.svg)]()
-[![Version](https://img.shields.io/badge/Version-2.2.1-orange.svg)]()
+[![Version](https://img.shields.io/badge/version-2.4.0-blue.svg)](https://github.com/Benoks/EShot/releases)
+[![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-lightgrey.svg)](#)
+[![Qt](https://img.shields.io/badge/Qt-6.x-green.svg)](https://www.qt.io/)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-<p align="center">
-  <img src="preview.png" alt="EShot Preview" width="700">
-</p>
+EShot is built for quick captures, clean annotations, OCR, uploads, pinned screenshots, and GIF recording without turning into a heavy background app.
+
+## Highlights
+
+- Region capture with multi-monitor and high-DPI support
+- Annotation tools: pen, arrow, line, rectangle, ellipse, text, blur, crop, eyedropper, and semi-transparent highlight
+- GIF recording for selected screen areas
+- OCR with bundled Tesseract support and optional language packs
+- Upload support for Catbox and Imgur
+- Pin screenshots on top of the desktop
+- Custom global hotkeys
+- Start with Windows through Task Scheduler
+- Update check through GitHub releases
+
+## What's New in v2.4.0
+
+- Added GIF recording with configurable FPS, duration, and loop options
+- Added eyedropper tool for picking colors directly from the screen
+- Added semi-transparent rectangle tool for filled highlights
+- Added selection lock to prevent accidental movement while annotating
+- Added adjustable blur intensity
+- Added multiline text support
+- Improved toolbar placement around the selected area
+- Improved undo and redo button states
+- Improved update notification behavior through the tray icon
+- Fixed selection, toolbar, startup, and installer regressions found during the v2.4.0 cycle
 
 ## Features
 
 ### Capture
-- **Multi-Monitor** — Pixel-perfect capture across all monitors with DPI awareness
-- **Area Selection** — Click and drag to select any region
-- **Corner Handles** — Resize selection precisely after capture
-- **Dimension Tooltip** — Always visible at the top-left corner of the selection
-- **Configurable Delay** — Set capture delay (0–10 seconds)
-- **Copy After Capture** — Auto-copy to clipboard on selection complete
 
-### Annotation Tools (11)
-| Tool | Key | Description |
-|------|-----|-------------|
-| Pen | `P` | Freehand drawing with smooth Bezier curves |
-| Arrow | `A` | Line with filled arrowhead |
-| Line | `L` | Straight line (no arrowhead) |
-| Rectangle | `R` | Rectangle (hold `Shift` for square) |
-| Circle | `C` | Ellipse (hold `Shift` for perfect circle) |
-| Text | `T` | Click to place text with dark background (multiline with `Shift+Enter`) |
-| Highlighter | `H` | Semi-transparent yellow stroke |
-| Semi-Rect | `D` | Semi-transparent filled rectangle for emphasis |
-| Blur | `B` | Mosaic pixelation with adjustable intensity |
-| Counter | `#` | Auto-incrementing numbered markers |
-| Eraser | `X` | Click to remove any annotation |
+- Capture a selected region from the screen
+- Move and resize the selected area before saving or copying
+- Keep the dimension label anchored to the selected area
+- Copy, save, upload, pin, annotate, or run OCR from the capture toolbar
 
-- **Undo/Redo** — Full undo/redo support (`Ctrl+Z` / `Ctrl+Y`), buttons gray out when unavailable
-- **Move Annotations** — Click any annotation to drag it (snaps to selection edges)
-- **Eyedropper** — Pick any color from the screen (`I` key)
-- **Lock Selection** — Lock the selection rectangle to prevent accidental moves while annotating
-- **Blur Intensity** — Adjustable blur strength (4–64px) via toolbar slider
-- **Color Picker** — Choose any color for tools
-- **Pen Width** — Adjustable from 1–20px
+### Annotation
+
+EShot includes the common tools needed for fast screenshot markup:
+
+- Freehand pen
+- Arrow and line
+- Rectangle and ellipse
+- Semi-transparent rectangle
+- Text and multiline text
+- Blur with adjustable intensity
+- Crop
+- Eyedropper color picker
+- Undo and redo
+
+Annotations snap to selection edges where useful, and toolbars reposition automatically when there is not enough screen space outside the selected region.
+
+### GIF Recording
+
+Record a selected part of the screen as a GIF. Recording settings include FPS, maximum duration, and loop behavior. EShot keeps the recording indicator outside the captured output so it does not appear in the final GIF.
+
+### OCR
+
+EShot can extract text from a selected area using Tesseract OCR. The installer can include the main OCR engine and selectable language packs, including English, Turkish, Russian, German, French, Spanish, and Italian.
+
+### Upload
+
+Upload screenshots directly from the capture toolbar. Supported services:
+
+- Catbox
+- Imgur
 
 ### Pin to Desktop
-- Pin any capture as an always-on-top floating window
-- **Resize** — Drag corner handles to scale (preserves aspect ratio)
-- **Opacity** — Scroll wheel to adjust transparency
-- **Shift+Scroll** — Zoom in/out
-- **Save As** — Right-click to save pinned image
-- **Close All** — Tray menu option to close all pinned windows
 
-### Settings (5 Tabs)
-- **General** — Language, save directory, filename pattern, auto-start, notifications, sound
-- **Capture** — Format (PNG/JPEG/BMP), quality, delay, copy-after-capture, close-after-copy
-- **Appearance** — Dark/light theme, high contrast mode, overlay opacity, crosshair style
-- **Interface** — Toolbar tool visibility (show/hide individual tools)
-- **Hotkey** — Custom capture hotkey with Win32 key mapping
+Pinned screenshots stay above other windows, making them useful for reference images, snippets, notes, UI comparisons, and quick visual memory.
 
-### Additional
-- **7 Languages** — Turkish, English, German, French, Spanish, Japanese, Chinese
-- **First-Run Wizard** — Guided setup on first launch (language, hotkey, save path)
-- **Export/Import Settings** — Save/load all settings as JSON
-- **Live Theme Switch** — Change dark/light/high-contrast without restart
-- **Customizable Tray Icon** — Dark or light icon style
-- **Auto-Update Check** — Tray icon turns yellow when a new version is available
-- **Command-Line Arguments** — `eshot --capture`, `eshot --save /path`
-- **Smart Filename Templates** — `%Y` (year), `%M` (month), `%D` (day), `%h` (hour), `%m` (min), `%s` (sec), `%T` (window title)
+### Settings
+
+The settings window includes:
+
+- General behavior
+- Capture behavior
+- Recording options
+- Appearance options
+- Interface options
+- Hotkey configuration
+
+Settings can be exported and imported, and hotkey combinations are validated before being saved.
 
 ## Keyboard Shortcuts
 
-### Global
-| Key | Action |
-|-----|--------|
-| `Print Screen` | Start capture (configurable) |
+Default shortcuts can be changed in Settings.
 
-### During Capture
-| Key | Action |
-|-----|--------|
-| `Left Click + Drag` | Select area |
-| `Enter` / `Ctrl+C` | Copy to clipboard |
-| `Ctrl+S` | Save to file |
-| `Esc` | Cancel / reset selection |
-| `Right Click` | Cancel (no selection) or reset (with selection) |
+| Shortcut | Action |
+| --- | --- |
+| `Print Screen` | Start capture |
+| `Enter` | Confirm/copy selected capture |
+| `Ctrl+C` | Copy selected capture |
+| `Esc` | Cancel capture or close active overlay |
+| `Shift+Enter` | Add a new line while editing text |
+| `I` | Eyedropper tool |
+| `D` | Semi-transparent rectangle tool |
 
-### Annotation Shortcuts
-| Key | Action |
-|-----|--------|
-| `P` `A` `L` `R` `C` `T` `H` `D` `B` `#` `X` | Select tool |
-| `Ctrl+Z` | Undo |
-| `Ctrl+Y` | Redo |
-| `Shift` + Draw | Perfect square / circle |
-| `Delete` | Delete selected annotation |
+## Install
 
-## Quick Start
+1. Download the latest installer from the [Releases page](https://github.com/Benoks/EShot/releases/latest).
+2. Run the setup file.
+3. Select optional OCR language packs if you want OCR support for more languages.
+4. Start EShot from the Start menu, desktop shortcut, or tray icon.
 
-Download the latest release from [Releases](https://github.com/Benoks/EShot/releases) and run the installer.
+If "Start with Windows" is enabled, EShot registers itself through Windows Task Scheduler.
 
 ## Build from Source
 
-### Requirements
+Requirements:
 
-- [Visual Studio Build Tools 2022](https://visualstudio.microsoft.com/visual-cpp-build-tools/) (MSVC)
-- [Qt 6.8](https://www.qt.io/download-qt-installer) (Core, Gui, Widgets, Network)
-- [CMake 3.16+](https://cmake.org/download/)
-- [Inno Setup 6](https://jrsoftware.org/isinfo.php) (optional, for installer)
+- Windows 10 or Windows 11
+- Qt 6
+- CMake
+- A C++17 compatible compiler
+- Inno Setup, only when building the installer
 
-### Build
+Basic build:
 
-```bash
-git clone https://github.com/Benoks/EShot.git
-cd EShot
-cmake -S . -B build -G "Visual Studio 17 2022" -DCMAKE_PREFIX_PATH="C:/Qt/6.8.0/msvc2022_64"
-cmake --build build --config Release
+```powershell
+mkdir build
+cd build
+cmake ..
+cmake --build . --config Release
 ```
 
-The executable will be at `build/bin/Release/EShot.exe`.
+Installer builds use the included Inno Setup script:
 
-### Create Installer
-
-```bash
-"C:\Program Files (x86)\Inno Setup 6\ISCC.exe" EShot_Setup.iss
+```powershell
+iscc EShot_Setup.iss
 ```
 
-Output: `installer_output/EShot_Setup_v2.2.0.exe`
+## Command Line
 
-## Tech Stack
-
-- **Language:** C++17
-- **UI Framework:** Qt 6.8 (Widgets)
-- **Build System:** CMake
-- **Platform API:** Win32 (`BitBlt`, `RegisterHotKey`, `GetSystemMetrics`)
-- **Packaging:** Inno Setup 6
+```powershell
+EShot.exe --capture
+EShot.exe --save "C:\path\to\capture.png"
+EShot.exe --silent
+```
 
 ## Project Structure
 
-```
+```text
 EShot/
-├── src/
-│   ├── main.cpp                    # App entry, tray icon, hotkey, update check
-│   ├── core/
-│   │   ├── HotkeyManager.cpp       # Global hotkey via Win32 API
-│   │   └── TranslationManager.h    # 7-language translation system
-│   ├── capture/
-│   │   ├── CaptureOverlay.cpp      # Full-screen overlay, selection, toolbar
-│   │   ├── PinnedWindow.cpp        # Pin-to-desktop with resize/opacity
-│   │   └── PinManager.cpp          # Pin persistence (unused in v2.1)
-│   ├── annotation/
-│   │   └── AnnotationEngine.cpp    # 11 drawing tools + undo/redo
-│   └── ui/
-│       ├── AnnotationToolbar.cpp   # Floating toolbar with tools
-│       ├── SettingsDialog.cpp      # Settings (5 tabs, export/import)
-│       ├── AboutDialog.cpp         # About window
-│       └── FirstRunWizard.cpp      # First-run setup wizard
-├── icons/                          # SVG icons for tools & UI
-├── resources/                      # Qt resource files, stylesheet
-├── EShot_Setup.iss                 # Inno Setup installer script
-└── EShot_Release/                  # Pre-built release binaries
++-- resources/             # Icons and application resources
++-- tesseract/             # OCR runtime files used by the installer
++-- CMakeLists.txt         # CMake build configuration
++-- EShot_Setup.iss        # Inno Setup installer script
++-- main.cpp               # Application entry point
++-- MainWindow.*           # Main tray/window behavior
++-- ScreenshotOverlay.*    # Capture and annotation overlay
++-- GifRecorder.*          # GIF recording support
++-- SettingsDialog.*       # Settings UI and persistence
+`-- UpdateChecker.*        # GitHub release update checks
 ```
-
-## Contributing
-
-Contributions are welcome! Please open an issue first to discuss what you'd like to change.
 
 ## License
 
-[MIT](LICENSE)
+This project is released under the MIT License. See [LICENSE](LICENSE) for details.

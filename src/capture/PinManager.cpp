@@ -54,7 +54,7 @@ void PinManager::savePin(const QPixmap &pixmap, const QPoint &pos, double scale,
 
     pins.append(pin);
 
-    // Limit koru
+        // Enforce limit
     while (pins.size() > MAX_PERSISTENT_PINS)
         pins.removeFirst();
 

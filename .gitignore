@@ -19,6 +19,10 @@
 *.jsc
 Makefile*
 *object_script.*
+moc_*.cpp
+mocs_compilation_*.cpp
+qrc_*.cpp
+ui_*.h
 
 # CMake
 CMakeCache.txt
@@ -29,6 +33,8 @@ Testing/
 build/
 _build/
 Build/
+build_test/
+build_release/
 bin/
 lib/
 
@@ -44,6 +50,7 @@ lib/
 *.vcxproj.user
 .vs/
 *.ipch
+*.tlog
 
 # OS generated files
 .DS_Store
@@ -56,3 +63,8 @@ installer_output/
 EShot_Release/
 EShot_new.exe
 *.new.exe
+test_output.gif
+*.gif.tmp
+
+ROADMAP.md
+

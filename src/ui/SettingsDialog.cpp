@@ -18,6 +18,8 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
+#include <QProcess>
+#include <algorithm>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -61,6 +63,13 @@ bool SettingsDialog::keySequenceToWin32(const QKeySequence &seq, UINT &modifiers
     Qt::KeyboardModifiers qtMod = combo.keyboardModifiers();
     Qt::Key qtKey = combo.key();
 
+    if (qtKey == Qt::Key_unknown ||
+        qtKey == Qt::Key_Shift ||
+        qtKey == Qt::Key_Control ||
+        qtKey == Qt::Key_Alt ||
+        qtKey == Qt::Key_Meta)
+        return false;
+
     modifiers = 0;
     if (qtMod & Qt::ShiftModifier)   modifiers |= MOD_SHIFT;
     if (qtMod & Qt::ControlModifier) modifiers |= MOD_CONTROL;
@@ -87,10 +96,12 @@ bool SettingsDialog::keySequenceToWin32(const QKeySequence &seq, UINT &modifiers
     }
 
     if (qtKey >= Qt::Key_A && qtKey <= Qt::Key_Z) {
+        if (qtMod == Qt::NoModifier) return false;
         vkey = 'A' + (qtKey - Qt::Key_A);
         return true;
     }
     if (qtKey >= Qt::Key_0 && qtKey <= Qt::Key_9) {
+        if (qtMod == Qt::NoModifier) return false;
         vkey = '0' + (qtKey - Qt::Key_0);
         return true;
     }
@@ -140,6 +151,44 @@ static QKeySequence win32ToKeySequence(UINT modifiers, UINT vkey)
     return QKeySequence(Qt::Key_Print);
 }
 
+bool SettingsDialog::isAutoStartEnabled()
+{
+#ifdef Q_OS_WIN
+    return QProcess::execute(QStringLiteral("schtasks"),
+                             {QStringLiteral("/Query"), QStringLiteral("/TN"), QStringLiteral("EShot")}) == 0;
+#else
+    return false;
+#endif
+}
+
+static bool setAutoStartTask(bool enabled)
+{
+#ifdef Q_OS_WIN
+    QProcess::execute(QStringLiteral("schtasks"),
+                      {QStringLiteral("/Delete"), QStringLiteral("/TN"), QStringLiteral("EShot"), QStringLiteral("/F")});
+
+    QSettings reg(QStringLiteral("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run"),
+                  QSettings::NativeFormat);
+    reg.remove(QStringLiteral("EShot"));
+
+    if (!enabled)
+        return true;
+
+    QString appPath = QCoreApplication::applicationFilePath().replace('/', '\\');
+    QString taskCommand = QStringLiteral("\"%1\" --silent").arg(appPath);
+    return QProcess::execute(QStringLiteral("schtasks"),
+                             {QStringLiteral("/Create"),
+                              QStringLiteral("/TN"), QStringLiteral("EShot"),
+                              QStringLiteral("/SC"), QStringLiteral("ONLOGON"),
+                              QStringLiteral("/RL"), QStringLiteral("HIGHEST"),
+                              QStringLiteral("/TR"), taskCommand,
+                              QStringLiteral("/F")}) == 0;
+#else
+    Q_UNUSED(enabled);
+    return true;
+#endif
+}
+
 void SettingsDialog::setupUI()
 {
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
@@ -153,6 +202,7 @@ void SettingsDialog::setupUI()
     QTabWidget *tabs = new QTabWidget(this);
     tabs->addTab(createGeneralTab(),     TranslationManager::tabGeneral());
     tabs->addTab(createCaptureTab(),     TranslationManager::tabCapture());
+    tabs->addTab(createRecordingTab(),   TranslationManager::tabRecording());
     tabs->addTab(createAppearanceTab(),  TranslationManager::tabAppearance());
     tabs->addTab(createInterfaceTab(),   TranslationManager::tabInterface());
     tabs->addTab(createHotkeyTab(),      TranslationManager::tabHotkey());
@@ -188,7 +238,7 @@ QWidget* SettingsDialog::createGeneralTab()
     QWidget *tab = new QWidget();
     QVBoxLayout *layout = new QVBoxLayout(tab);
 
-    // Dil seçimi
+    // Language selection
     QGroupBox *langGroup = new QGroupBox(TranslationManager::language());
     QHBoxLayout *langLayout = new QHBoxLayout(langGroup);
     m_langCombo = new QComboBox();
@@ -199,12 +249,13 @@ QWidget* SettingsDialog::createGeneralTab()
     m_langCombo->addItem(TranslationManager::langSpanish(), "es");
     m_langCombo->addItem(TranslationManager::langJapanese(), "ja");
     m_langCombo->addItem(TranslationManager::langChinese(), "zh");
+    m_langCombo->addItem(TranslationManager::langRussian(), "ru");
     m_langCombo->setToolTip(TranslationManager::tipLanguage());
     langLayout->addWidget(m_langCombo);
     langLayout->addStretch();
     layout->addWidget(langGroup);
 
-    // Kayıt dizini
+    // Save directory
     QGroupBox *pathGroup = new QGroupBox(TranslationManager::saveDir());
     QHBoxLayout *pathLayout = new QHBoxLayout(pathGroup);
     m_savePathEdit = new QLineEdit();
@@ -216,7 +267,7 @@ QWidget* SettingsDialog::createGeneralTab()
     pathLayout->addWidget(browseBtn);
     layout->addWidget(pathGroup);
 
-    // Dosya adı şablonu
+    // Filename template
     QGroupBox *fnGroup = new QGroupBox(TranslationManager::filenamePattern());
     QVBoxLayout *fnLayout = new QVBoxLayout(fnGroup);
     m_filenamePatternEdit = new QLineEdit();
@@ -232,7 +283,7 @@ QWidget* SettingsDialog::createGeneralTab()
     fnLayout->addWidget(helpLabel);
     layout->addWidget(fnGroup);
 
-    // Genel seçenekler
+    // General options
     QGroupBox *genGroup = new QGroupBox(TranslationManager::generalOptions());
     QVBoxLayout *genLayout = new QVBoxLayout(genGroup);
     m_autoStartCheck         = new QCheckBox(TranslationManager::autoStart());
@@ -249,15 +300,16 @@ QWidget* SettingsDialog::createGeneralTab()
     genLayout->addWidget(m_copyPathAfterSaveCheck);
     layout->addWidget(genGroup);
 
-    // Erişilebilirlik
+    // Accessibility
     QGroupBox *accessGroup = new QGroupBox(TranslationManager::accessibility());
     QVBoxLayout *accessLayout = new QVBoxLayout(accessGroup);
     m_highContrastCheck = new QCheckBox(TranslationManager::highContrast());
     m_highContrastCheck->setToolTip(TranslationManager::tipHighContrast());
+    connect(m_highContrastCheck, &QCheckBox::toggled, this, &SettingsDialog::onThemeChanged);
     accessLayout->addWidget(m_highContrastCheck);
     layout->addWidget(accessGroup);
 
-    // Tepsi simgesi
+    // Tray icon
     QGroupBox *trayGroup = new QGroupBox(TranslationManager::trayIcon());
     QVBoxLayout *trayLayout = new QVBoxLayout(trayGroup);
     m_trayIconCombo = new QComboBox();
@@ -267,7 +319,7 @@ QWidget* SettingsDialog::createGeneralTab()
     trayLayout->addWidget(m_trayIconCombo);
     layout->addWidget(trayGroup);
 
-    // Ayarları dışa/içe aktar
+    // Import/export settings
     QGroupBox *impExpGroup = new QGroupBox(TranslationManager::settingsExportImport());
     QHBoxLayout *impExpLayout = new QHBoxLayout(impExpGroup);
     QPushButton *exportBtn = new QPushButton(TranslationManager::exportSettings());
@@ -312,6 +364,7 @@ QWidget* SettingsDialog::createCaptureTab()
         bool jpeg = (m_formatCombo->itemData(idx).toString() == "JPEG");
         m_qualitySlider->setEnabled(jpeg);
         m_qualitySpin->setEnabled(jpeg);
+        onFilenamePatternChanged(m_filenamePatternEdit ? m_filenamePatternEdit->text() : QString());
     });
     layout->addWidget(fmtGroup);
 
@@ -324,7 +377,7 @@ QWidget* SettingsDialog::createCaptureTab()
     m_delaySpin->setSpecialValueText(TranslationManager::noDelay());
     capLayout->addRow(TranslationManager::delay(), m_delaySpin);
     m_copyAfterCaptureCheck = new QCheckBox(TranslationManager::copyAfterCapture());
-    capLayout->addRow(m_copyAfterCaptureCheck);
+    m_copyAfterCaptureCheck->hide();
     m_closeAfterCopyCheck = new QCheckBox(TranslationManager::closeAfterCopy());
     capLayout->addRow(m_closeAfterCopyCheck);
     layout->addWidget(capGroup);
@@ -371,6 +424,49 @@ QWidget* SettingsDialog::createAppearanceTab()
     return tab;
 }
 
+QWidget* SettingsDialog::createRecordingTab()
+{
+    QWidget *tab = new QWidget();
+    QVBoxLayout *layout = new QVBoxLayout(tab);
+
+    QGroupBox *recGroup = new QGroupBox(TranslationManager::recordingSettings());
+    QFormLayout *recForm = new QFormLayout(recGroup);
+
+    m_recordingFpsSpin = new QSpinBox();
+    m_recordingFpsSpin->setRange(5, 15);
+    m_recordingFpsSpin->setSuffix(QStringLiteral(" fps"));
+    m_recordingFpsSpin->setValue(10);
+    recForm->addRow(TranslationManager::recordingFps(), m_recordingFpsSpin);
+
+    m_recordingMaxSecSpin = new QSpinBox();
+    m_recordingMaxSecSpin->setRange(0, 600);
+    m_recordingMaxSecSpin->setSuffix(QStringLiteral(" s"));
+    m_recordingMaxSecSpin->setSpecialValueText(TranslationManager::recordingUnlimited());
+    m_recordingMaxSecSpin->setValue(30);
+    recForm->addRow(TranslationManager::recordingMaxTime(), m_recordingMaxSecSpin);
+
+    m_recordingLoopSpin = new QSpinBox();
+    m_recordingLoopSpin->setRange(0, 99);
+    m_recordingLoopSpin->setSpecialValueText(TranslationManager::recordingLoopInfinite());
+    m_recordingLoopSpin->setValue(0);
+    recForm->addRow(TranslationManager::recordingLoop(), m_recordingLoopSpin);
+
+    layout->addWidget(recGroup);
+
+    QGroupBox *imgGroup = new QGroupBox(TranslationManager::uploadToImgur());
+    QFormLayout *imgForm = new QFormLayout(imgGroup);
+
+    m_imgurClientIdEdit = new QLineEdit();
+    m_imgurClientIdEdit->setEchoMode(QLineEdit::Password);
+    m_imgurClientIdEdit->setPlaceholderText(TranslationManager::imgurClientIdDesc());
+    imgForm->addRow(TranslationManager::imgurClientId(), m_imgurClientIdEdit);
+
+    layout->addWidget(imgGroup);
+
+    layout->addStretch();
+    return tab;
+}
+
 QWidget* SettingsDialog::createInterfaceTab()
 {
     QWidget *tab = new QWidget();
@@ -390,6 +486,7 @@ QWidget* SettingsDialog::createInterfaceTab()
     QVector<ToolInfo> tools = {
         {"Pen",         TranslationManager::toolListPen()},
         {"Arrow",       TranslationManager::toolListArrow()},
+        {"Line",        TranslationManager::toolListLine()},
         {"Rectangle",   TranslationManager::toolListRect()},
         {"SemiRect",    TranslationManager::toolListSemiRect()},
         {"Circle",      TranslationManager::toolListCircle()},
@@ -398,7 +495,6 @@ QWidget* SettingsDialog::createInterfaceTab()
         {"Blur",        TranslationManager::toolListBlur()},
         {"Counter",     TranslationManager::toolListCounter()},
         {"Eraser",      TranslationManager::toolListEraser()},
-        {"Line",        TranslationManager::toolListLine()},
     };
 
     for (const auto &t : tools) {
@@ -486,15 +582,19 @@ void SettingsDialog::loadSettings()
     m_filenamePatternEdit->setText(m_settings->value("filenamePattern", "Screenshot_%Y-%M-%D_%h-%m-%s").toString());
     onFilenamePatternChanged(m_filenamePatternEdit->text());
 
+#ifdef Q_OS_WIN
+    m_autoStartCheck->setChecked(isAutoStartEnabled());
+#else
     m_autoStartCheck->setChecked(m_settings->value("autoStart", false).toBool());
+#endif
     m_showNotificationsCheck->setChecked(m_settings->value("showNotifications", true).toBool());
     m_playSoundCheck->setChecked(m_settings->value("playSound", false).toBool());
     m_copyPathAfterSaveCheck->setChecked(m_settings->value("copyPathAfterSave", false).toBool());
 
-    // Dil (int olarak kaydediliyor, string'e çevir)
+    // Language (saved as int, convert to string)
     int langInt = m_settings->value("language", 1).toInt(); // 1=English default
-    static const char* langCodes[] = {"tr","en","de","fr","es","ja","zh"};
-    QString lang = (langInt >= 0 && langInt <= 6) ? langCodes[langInt] : "en";
+    static const char* langCodes[] = {"tr","en","de","fr","es","ja","zh","ru"};
+    QString lang = (langInt >= 0 && langInt <= 7) ? langCodes[langInt] : "en";
     int li = m_langCombo->findData(lang);
     if (li >= 0) m_langCombo->setCurrentIndex(li);
 
@@ -506,8 +606,17 @@ void SettingsDialog::loadSettings()
     m_qualitySlider->setValue(q);
     m_qualitySpin->setValue(q);
     m_delaySpin->setValue(m_settings->value("captureDelay", 0).toInt());
-    m_copyAfterCaptureCheck->setChecked(m_settings->value("copyAfterCapture", true).toBool());
+    m_copyAfterCaptureCheck->setChecked(false);
     m_closeAfterCopyCheck->setChecked(m_settings->value("closeAfterCopy", true).toBool());
+
+    if (m_recordingFpsSpin)
+        m_recordingFpsSpin->setValue(m_settings->value("recordingFps", 10).toInt());
+    if (m_recordingMaxSecSpin)
+        m_recordingMaxSecSpin->setValue(m_settings->value("recordingMaxSeconds", 30).toInt());
+    if (m_recordingLoopSpin)
+        m_recordingLoopSpin->setValue(m_settings->value("recordingLoop", 0).toInt());
+    if (m_imgurClientIdEdit)
+        m_imgurClientIdEdit->setText(m_settings->value("imgurClientId").toString());
 
     bool jpeg = (fmt == "JPEG");
     m_qualitySlider->setEnabled(jpeg);
@@ -526,7 +635,7 @@ void SettingsDialog::loadSettings()
     if (ti >= 0) m_trayIconCombo->setCurrentIndex(ti);
 
     QStringList visibleTools = m_settings->value("visibleTools",
-        QStringList{"Pen","Arrow","Rectangle","SemiRect","Circle","Text","Highlighter","Blur","Counter"})
+        QStringList{"Pen","Arrow","Line","Rectangle","Circle","Text","Highlighter","SemiRect","Blur","Counter","Eraser"})
         .toStringList();
     for (int i = 0; i < m_toolVisibilityList->count(); ++i) {
         QListWidgetItem *item = m_toolVisibilityList->item(i);
@@ -549,7 +658,7 @@ void SettingsDialog::onHotkeyChanged(const QKeySequence &seq)
         m_hotkeyStatusLabel->setText(TranslationManager::hotkeyInvalid());
         m_hotkeyStatusLabel->setStyleSheet("color: #ff9800; font-size: 12px;");
     } else {
-        m_hotkeyStatusLabel->setText(QString("✅ %1").arg(seq.toString(QKeySequence::NativeText)));
+        m_hotkeyStatusLabel->setText(QString("OK: %1").arg(seq.toString(QKeySequence::NativeText)));
         m_hotkeyStatusLabel->setStyleSheet("color: #4caf50; font-size: 12px;");
     }
 }
@@ -557,7 +666,12 @@ void SettingsDialog::onHotkeyChanged(const QKeySequence &seq)
 void SettingsDialog::onFilenamePatternChanged(const QString &text)
 {
     QString preview = resolvePatternPreview(text);
-    m_patternPreviewLabel->setText(TranslationManager::patternPreview() + ": " + preview + ".png");
+    QString ext = QStringLiteral("png");
+    if (m_formatCombo) {
+        ext = m_formatCombo->currentData().toString().toLower();
+        if (ext == "jpeg") ext = QStringLiteral("jpg");
+    }
+    m_patternPreviewLabel->setText(TranslationManager::patternPreview() + ": " + preview + "." + ext);
 }
 
 void SettingsDialog::onBrowse()
@@ -580,7 +694,9 @@ void SettingsDialog::onDeselectAllTools()
 
 void SettingsDialog::onSave()
 {
-    QString savePath = m_savePathEdit->text();
+    QString savePath = m_savePathEdit->text().trimmed();
+    if (savePath.isEmpty())
+        savePath = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
     if (!savePath.isEmpty()) {
         QDir dir(savePath);
         if (!dir.exists() && !dir.mkpath(".")) {
@@ -601,10 +717,22 @@ void SettingsDialog::onSave()
         newVKey = VK_SNAPSHOT;
     }
 
-    // Dil kaydet
+    if (!HotkeyManager::instance().reRegisterCaptureHotkey(newMod, newVKey)) {
+        QMessageBox::warning(
+            this,
+            TranslationManager::errInvalidHotkeyTitle(),
+            TranslationManager::errInvalidHotkey() + QStringLiteral("\n\nBu kısayol başka bir uygulama tarafından kullanılıyor olabilir."));
+        m_hotkeyEdit->setKeySequence(win32ToKeySequence(
+            HotkeyManager::instance().captureModifiers(),
+            HotkeyManager::instance().captureVirtualKey()));
+        return;
+    }
+
+    // Save language
     QString newLang = m_langCombo->currentData().toString();
     TranslationManager::Language lang = TranslationManager::English;
     if (newLang == "tr") lang = TranslationManager::Turkish;
+    else if (newLang == "ru") lang = TranslationManager::Russian;
     else if (newLang == "de") lang = TranslationManager::German;
     else if (newLang == "fr") lang = TranslationManager::French;
     else if (newLang == "es") lang = TranslationManager::Spanish;
@@ -623,7 +751,7 @@ void SettingsDialog::onSave()
     m_settings->setValue("imageFormat",        m_formatCombo->currentData().toString());
     m_settings->setValue("imageQuality",       m_qualitySpin->value());
     m_settings->setValue("captureDelay",       m_delaySpin->value());
-    m_settings->setValue("copyAfterCapture",   m_copyAfterCaptureCheck->isChecked());
+    m_settings->setValue("copyAfterCapture",   false);
     m_settings->setValue("closeAfterCopy",     m_closeAfterCopyCheck->isChecked());
 
     m_settings->setValue("darkMode",           m_darkModeCheck->isChecked());
@@ -642,18 +770,21 @@ void SettingsDialog::onSave()
 
     m_settings->setValue("hotkeyModifiers", newMod);
     m_settings->setValue("hotkeyVKey",      newVKey);
-    HotkeyManager::instance().reRegisterCaptureHotkey(newMod, newVKey);
 
-#ifdef Q_OS_WIN
-    QSettings reg("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
-                   QSettings::NativeFormat);
-    if (m_autoStartCheck->isChecked()) {
-        QString appPath = QCoreApplication::applicationFilePath().replace('/', '\\');
-        reg.setValue("EShot", "\"" + appPath + "\"");
-    } else {
-        reg.remove("EShot");
+    if (m_recordingFpsSpin)
+        m_settings->setValue("recordingFps", m_recordingFpsSpin->value());
+    if (m_recordingMaxSecSpin)
+        m_settings->setValue("recordingMaxSeconds", m_recordingMaxSecSpin->value());
+    if (m_recordingLoopSpin)
+        m_settings->setValue("recordingLoop", m_recordingLoopSpin->value());
+    if (m_imgurClientIdEdit)
+        m_settings->setValue("imgurClientId", m_imgurClientIdEdit->text().trimmed());
+
+    if (!setAutoStartTask(m_autoStartCheck->isChecked())) {
+        QMessageBox::warning(this, TranslationManager::errTitle(),
+                             QStringLiteral("Windows ile başlat ayarı kaydedilemedi."));
+        return;
     }
-#endif
 
     m_settings->sync();
     accept();
@@ -689,7 +820,7 @@ void SettingsDialog::onExportSettings()
     obj["imageFormat"] = m_formatCombo->currentData().toString();
     obj["imageQuality"] = m_qualitySpin->value();
     obj["captureDelay"] = m_delaySpin->value();
-    obj["copyAfterCapture"] = m_copyAfterCaptureCheck->isChecked();
+    obj["copyAfterCapture"] = false;
     obj["closeAfterCopy"] = m_closeAfterCopyCheck->isChecked();
     obj["darkMode"] = m_darkModeCheck->isChecked();
     obj["overlayOpacity"] = m_opacitySlider->value();
@@ -711,6 +842,15 @@ void SettingsDialog::onExportSettings()
         obj["hotkeyModifiers"] = static_cast<int>(mod);
         obj["hotkeyVKey"] = static_cast<int>(vk);
     }
+
+    if (m_recordingFpsSpin)
+        obj["recordingFps"] = m_recordingFpsSpin->value();
+    if (m_recordingMaxSecSpin)
+        obj["recordingMaxSeconds"] = m_recordingMaxSecSpin->value();
+    if (m_recordingLoopSpin)
+        obj["recordingLoop"] = m_recordingLoopSpin->value();
+    if (m_imgurClientIdEdit)
+        obj["imgurClientId"] = m_imgurClientIdEdit->text().trimmed();
 
     QFile file(path);
     if (file.open(QIODevice::WriteOnly)) {
@@ -762,7 +902,7 @@ void SettingsDialog::onImportSettings()
         m_qualitySpin->setValue(obj["imageQuality"].toInt());
     }
     if (obj.contains("captureDelay")) m_delaySpin->setValue(obj["captureDelay"].toInt());
-    if (obj.contains("copyAfterCapture")) m_copyAfterCaptureCheck->setChecked(obj["copyAfterCapture"].toBool());
+    if (obj.contains("copyAfterCapture")) m_copyAfterCaptureCheck->setChecked(false);
     if (obj.contains("closeAfterCopy")) m_closeAfterCopyCheck->setChecked(obj["closeAfterCopy"].toBool());
     if (obj.contains("darkMode")) m_darkModeCheck->setChecked(obj["darkMode"].toBool());
     if (obj.contains("overlayOpacity")) m_opacitySlider->setValue(obj["overlayOpacity"].toInt());
@@ -789,6 +929,14 @@ void SettingsDialog::onImportSettings()
             static_cast<UINT>(obj["hotkeyModifiers"].toInt()),
             static_cast<UINT>(obj["hotkeyVKey"].toInt())));
     }
+    if (m_recordingFpsSpin && obj.contains("recordingFps"))
+        m_recordingFpsSpin->setValue(obj["recordingFps"].toInt());
+    if (m_recordingMaxSecSpin && obj.contains("recordingMaxSeconds"))
+        m_recordingMaxSecSpin->setValue(obj["recordingMaxSeconds"].toInt());
+    if (m_recordingLoopSpin && obj.contains("recordingLoop"))
+        m_recordingLoopSpin->setValue(obj["recordingLoop"].toInt());
+    if (m_imgurClientIdEdit && obj.contains("imgurClientId"))
+        m_imgurClientIdEdit->setText(obj["imgurClientId"].toString());
 
     QMessageBox::information(this, TranslationManager::importSettings(), TranslationManager::importSuccess());
 }
@@ -799,7 +947,7 @@ void SettingsDialog::onThemeChanged()
     bool highContrast = m_highContrastCheck->isChecked();
     QPalette p;
     if (highContrast) {
-        // Yüksek kontrast modu
+        // High contrast mode
         p.setColor(QPalette::Window, Qt::black);
         p.setColor(QPalette::WindowText, Qt::white);
         p.setColor(QPalette::Base, Qt::black);

@@ -96,12 +96,12 @@ void PinnedWindow::paintEvent(QPaintEvent *event)
 
     painter.fillRect(rect(), Qt::transparent);
 
-    // Orijinal görseli ölçeklenmiş boyutta çiz
+    // Draw original image at scaled size
     int drawW = qMax(1, static_cast<int>(m_pixmap.width() * m_scale));
     int drawH = qMax(1, static_cast<int>(m_pixmap.height() * m_scale));
     painter.drawPixmap(1, BAR_HEIGHT + 1, drawW, drawH, m_pixmap);
 
-    // Üst bar
+    // Top bar
     QPainterPath barPath;
     barPath.addRoundedRect(QRectF(1, 1, width() - 2, BAR_HEIGHT), 6, 6);
     painter.setPen(Qt::NoPen);
@@ -109,7 +109,7 @@ void PinnedWindow::paintEvent(QPaintEvent *event)
     painter.drawPath(barPath);
 
     if (m_hovered) {
-        // Kapatma butonu
+        // Close button
         QRect closeRect = closeButtonRect();
         painter.setPen(Qt::NoPen);
         painter.setBrush(QColor(70, 70, 70, 200));
@@ -122,7 +122,7 @@ void PinnedWindow::paintEvent(QPaintEvent *event)
         painter.drawLine(closeRect.right() - m, closeRect.top() + m,
                          closeRect.left() + m, closeRect.bottom() - m);
 
-        // Pin ikonu
+        // Pin icon
         int iconX = 14;
         int iconY = BAR_HEIGHT / 2;
         painter.setPen(QPen(QColor(0, 122, 204), 1.5));
@@ -130,7 +130,7 @@ void PinnedWindow::paintEvent(QPaintEvent *event)
         painter.drawEllipse(QPoint(iconX, iconY - 2), 3, 3);
         painter.drawLine(iconX, iconY + 1, iconX, iconY + 7);
 
-        // Boyut bilgisi
+        // Size info
         QString sizeText = QString("%1x%2 (%3%)")
             .arg(m_pixmap.width()).arg(m_pixmap.height())
             .arg(qRound(m_scale * 100));
@@ -141,7 +141,7 @@ void PinnedWindow::paintEvent(QPaintEvent *event)
         painter.drawText(iconX + 8, 0, width() - iconX - 8 - CLOSE_BTN_SIZE - 14, BAR_HEIGHT,
                          Qt::AlignVCenter, sizeText);
 
-        // Yeniden boyutlandırma tutamakları
+        // Resize handles
         painter.setPen(Qt::NoPen);
         painter.setBrush(QColor(0, 122, 204, 180));
         for (int i = TopLeft; i <= BottomRight; ++i) {
@@ -185,7 +185,7 @@ void PinnedWindow::mouseMoveEvent(QMouseEvent *event)
         QPoint current = event->globalPosition().toPoint();
         QPoint delta = current - m_resizeStartGlobal;
 
-        // Köşeye göre ölçek hesapla
+        // Calculate scale per corner
         double newW, newH;
         switch (m_resizeHandle) {
             case BottomRight:
@@ -208,13 +208,13 @@ void PinnedWindow::mouseMoveEvent(QMouseEvent *event)
                 return;
         }
 
-        // En-boy oranını koru
+        // Keep aspect ratio
         double aspect = static_cast<double>(m_pixmap.width()) / m_pixmap.height();
         double avgDim = (newW + newH) / 2.0;
         newW = avgDim;
         newH = avgDim / aspect;
 
-        // Ölçek sınırları
+        // Scale limits
         double newScaleW = newW / m_pixmap.width();
         double newScaleH = newH / m_pixmap.height();
         m_scale = qBound(MIN_SCALE, qMin(newScaleW, newScaleH), MAX_SCALE);
@@ -228,7 +228,7 @@ void PinnedWindow::mouseMoveEvent(QMouseEvent *event)
         move(event->globalPosition().toPoint() - m_dragOffset);
     }
 
-    // Cursor güncelle
+    // Update cursor
     if (m_hovered) {
         ResizeHandle handle = getResizeHandle(event->pos());
         switch (handle) {
@@ -278,11 +278,11 @@ void PinnedWindow::wheelEvent(QWheelEvent *event)
 {
     double delta = event->angleDelta().y() > 0 ? 0.05 : -0.05;
     if (event->modifiers() & Qt::ShiftModifier) {
-        // Shift + Scroll → Ölçek (zoom)
+        // Shift + Scroll → scale (zoom)
         m_scale = qBound(MIN_SCALE, m_scale + delta, MAX_SCALE);
         updateWindowSize();
     } else {
-        // Normal Scroll → Opaklık
+        // Normal Scroll → opacity
         setOpacity(m_opacity + delta);
     }
     update();

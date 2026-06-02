@@ -29,13 +29,13 @@ private:
     int m_currentPage;
     QStackedWidget *m_stack;
 
-    // Sayfa 1: Dil
+    // Page 1: Language
     QComboBox *m_langCombo;
 
-    // Sayfa 2: Kısayol
+    // Page 2: Shortcut
     QKeySequenceEdit *m_hotkeyEdit;
 
-    // Sayfa 3: Kayıt yolu
+    // Page 3: Save path
     QLineEdit *m_savePathEdit;
 };
 

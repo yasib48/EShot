@@ -22,12 +22,18 @@ public:
     explicit CaptureOverlay(QWidget *parent = nullptr);
     ~CaptureOverlay();
     void startCapture();
+    void startCaptureForRecording();
     void refreshUI();
+    void prewarm();
 
 signals:
     void captureCompleted(const QPixmap &pixmap);
+    void captureSaved(const QString &path);
     void captureCancelled();
     void pinnedWindowCreated(PinnedWindow *window);
+    void regionSelected(QRect rect);
+    void regionCancelled();
+    void gifCaptureRequested(QRect rect);
 
 protected:
     void paintEvent(QPaintEvent *event) override;
@@ -50,7 +56,7 @@ private:
     void selectMonitorAt(const QPoint &pos);
     QPixmap getSelectedPixmap();
 
-    // Dosya adı şablonu parse
+    // Filename template parse
     QString resolveFilenamePattern(const QString &pattern) const;
     QString resolveWindowTitle() const;
 
@@ -68,49 +74,54 @@ private:
     QWidget *m_actionPanel;
     AnnotationEngine *m_annotationEngine;
 
-    // Metin düzenleme — çoklu satır desteği
+    // Text editing — multi-line support
     QTextEdit *m_textEdit;
     QPoint m_textEditPosition;
     void commitText();
     void cancelTextEdit();
     void updateUndoRedoState();
 
-    // Boyutlandırma ve Taşıma
+    // Resize and move
     enum ResizeMode { ResNone, ResTopLeft, ResTopRight, ResBottomRight, ResBottomLeft, ResMove, ResNewSelection };
     ResizeMode m_resizeMode;
     ResizeMode getResizeMode(const QPoint &pos);
     void updateCursor(const QPoint &pos);
 
-    // Annotation taşıma
+    // Annotation move
     bool m_isDraggingAnnotation;
     QPoint m_dragAnnotationStart;
 
-    // Text onaylama flag'i
+    // Text confirm flag
     bool m_textJustCommitted;
+    bool m_textEditing;
 
-    // Aktif pencere başlığı (%T için)
+    // Active window title (for %T)
     HWND m_foregroundHwnd;
 
     QTimer *m_captureDelayTimer;
 
-    // Opaklık ayarı
+    // Opacity setting
     int m_overlayOpacity;
 
-    // Crosshair stili
+    // Crosshair style
     QString m_crosshairStyle;
 
-    // Ayarlar
+    // Settings
     bool m_copyAfterCapture;
     bool m_closeAfterCopy;
 
-    // Pinned pencereler listesi (ömür yönetimi için)
+    // Pinned windows list (for lifetime management)
     QList<QPointer<QWidget>> m_pinnedWindows;
 
-    // Yeni: Renk seçici (eyedropper) modu
+    // New: Eyedropper mode
     bool m_eyedropperActive;
 
-    // Yeni: Seçim kilidi
+    // New: Selection lock
     bool m_selectionLocked;
+
+    // New: Special capture mode (recording, scrolling, etc.)
+    enum CaptureMode { ModeNormal, ModeRecording };
+    CaptureMode m_captureMode;
 
 private slots:
     void onToolSelected(int toolId);
@@ -121,6 +132,9 @@ private slots:
     void onEyedropperRequested();
     void onSelectionLockToggled(bool locked);
     void onBlurIntensityChanged(int intensity);
+    void onOcrRequested();
+    void onUploadRequested();
+    void onGifRequested();
 
     void performCapture();
 };

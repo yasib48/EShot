@@ -32,8 +32,8 @@ protected:
     void wheelEvent(QWheelEvent *event) override;
 
 private:
-    QPixmap m_pixmap;       // Orijinal görsel (asla değişmez)
-    double m_scale;         // Ölçek çarpanı (1.0 = orijinal boyut)
+    QPixmap m_pixmap;       // Original image (never mutated)
+    double m_scale;         // Scale factor (1.0 = original size)
     QPoint m_dragOffset;
     bool m_dragging;
     bool m_hovered;
@@ -41,7 +41,7 @@ private:
 
     void updateWindowSize();
 
-    // Yeniden boyutlandırma
+    // Resizing
     enum ResizeHandle { NoHandle, TopLeft, TopRight, BottomLeft, BottomRight };
     ResizeHandle m_resizeHandle;
     QRect handleRect(ResizeHandle handle) const;
@@ -49,7 +49,7 @@ private:
     QPoint m_resizeStartGlobal;
     QSize m_resizeStartSize;
 
-    // Kapatma butonu alanı
+    // Close button area
     QRect closeButtonRect() const;
 };
 

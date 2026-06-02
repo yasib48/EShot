@@ -41,7 +41,7 @@ void FirstRunWizard::setupPages()
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
     mainLayout->setSpacing(16);
 
-    // Başlık
+    // Title
     QFont titleFont;
     titleFont.setPointSize(16);
     titleFont.setBold(true);
@@ -55,10 +55,9 @@ void FirstRunWizard::setupPages()
     descLabel->setStyleSheet("color: #aaa;");
     mainLayout->addWidget(descLabel);
 
-    // Sayfalar
-    m_stack = new QStackedWidget(this);
+    // Pages
 
-    // Sayfa 1: Dil
+    // Page 1: Language
     QWidget *page1 = new QWidget();
     QVBoxLayout *p1Layout = new QVBoxLayout(page1);
     QGroupBox *langGroup = new QGroupBox(TranslationManager::language());
@@ -71,12 +70,13 @@ void FirstRunWizard::setupPages()
     m_langCombo->addItem("Español", "es");
     m_langCombo->addItem("日本語", "ja");
     m_langCombo->addItem("中文", "zh");
+    m_langCombo->addItem("Русский", "ru");
     langLayout->addWidget(m_langCombo);
     p1Layout->addWidget(langGroup);
     p1Layout->addStretch();
     m_stack->addWidget(page1);
 
-    // Sayfa 2: Kısayol
+    // Page 2: Shortcut
     QWidget *page2 = new QWidget();
     QVBoxLayout *p2Layout = new QVBoxLayout(page2);
     QGroupBox *hkGroup = new QGroupBox(TranslationManager::hotkeyTitle());
@@ -92,7 +92,7 @@ void FirstRunWizard::setupPages()
     p2Layout->addStretch();
     m_stack->addWidget(page2);
 
-    // Sayfa 3: Kayıt yolu
+    // Page 3: Save path
     QWidget *page3 = new QWidget();
     QVBoxLayout *p3Layout = new QVBoxLayout(page3);
     QGroupBox *pathGroup = new QGroupBox(TranslationManager::saveDir());
@@ -114,7 +114,7 @@ void FirstRunWizard::setupPages()
 
     mainLayout->addWidget(m_stack);
 
-    // Butonlar
+    // Buttons
     QHBoxLayout *btnLayout = new QHBoxLayout();
     btnLayout->addStretch();
 
@@ -163,7 +163,7 @@ void FirstRunWizard::onFinish()
 {
     QSettings s("EShot", "EShot");
 
-    // Dil kaydet
+    // Save language
     QString lang = m_langCombo->currentData().toString();
     TranslationManager::Language langEnum = TranslationManager::English;
     if (lang == "tr") langEnum = TranslationManager::Turkish;
@@ -176,11 +176,11 @@ void FirstRunWizard::onFinish()
     s.setValue("language", static_cast<int>(langEnum));
     s.setValue("wizardCompleted", true);
 
-    // Kısayol kaydet
+    // Save shortcut
     s.setValue("hotkeyModifiers", 0);
     s.setValue("hotkeyVKey", 0x2C); // VK_SNAPSHOT
 
-    // Kayıt yolu kaydet
+    // Save save-path
     s.setValue("savePath", m_savePathEdit->text());
 
     s.setValue("wizardCompleted", true);

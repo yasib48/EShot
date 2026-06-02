@@ -41,55 +41,63 @@ private:
     void setupUI();
     QWidget* createGeneralTab();
     QWidget* createCaptureTab();
+    QWidget* createRecordingTab();
     QWidget* createAppearanceTab();
     QWidget* createInterfaceTab();
     QWidget* createHotkeyTab();
 
     QString resolvePatternPreview(const QString &pattern) const;
 
-    // Kısayol tuşunu Win32 VK + modifier'a çöz
+    // Resolve shortcut to Win32 VK + modifier
     static bool keySequenceToWin32(const QKeySequence &seq, UINT &modifiers, UINT &vkey);
+    static bool isAutoStartEnabled();
 
-    QSettings *m_settings;
+    QSettings *m_settings = nullptr;
 
-    // Genel
-    QLineEdit *m_savePathEdit;
-    QLineEdit *m_filenamePatternEdit;
-    QLabel *m_patternPreviewLabel;
-    QCheckBox *m_autoStartCheck;
-    QCheckBox *m_showNotificationsCheck;
-    QCheckBox *m_playSoundCheck;
-    QCheckBox *m_copyPathAfterSaveCheck;
+    // General
+    QLineEdit *m_savePathEdit = nullptr;
+    QLineEdit *m_filenamePatternEdit = nullptr;
+    QLabel *m_patternPreviewLabel = nullptr;
+    QCheckBox *m_autoStartCheck = nullptr;
+    QCheckBox *m_showNotificationsCheck = nullptr;
+    QCheckBox *m_playSoundCheck = nullptr;
+    QCheckBox *m_copyPathAfterSaveCheck = nullptr;
 
-    // Yakalama
-    QComboBox *m_formatCombo;
-    QSlider *m_qualitySlider;
-    QSpinBox *m_qualitySpin;
-    QSpinBox *m_delaySpin;
-    QCheckBox *m_copyAfterCaptureCheck;
-    QCheckBox *m_closeAfterCopyCheck;
+    // Capture
+    QComboBox *m_formatCombo = nullptr;
+    QSlider *m_qualitySlider = nullptr;
+    QSpinBox *m_qualitySpin = nullptr;
+    QSpinBox *m_delaySpin = nullptr;
+    QCheckBox *m_copyAfterCaptureCheck = nullptr;
+    QCheckBox *m_closeAfterCopyCheck = nullptr;
 
-    // Görünüm
-    QCheckBox *m_darkModeCheck;
-    QSlider *m_opacitySlider;
-    QLabel *m_opacityValueLabel;
-    QComboBox *m_crosshairStyleCombo;
+    // Appearance
+    QCheckBox *m_darkModeCheck = nullptr;
+    QSlider *m_opacitySlider = nullptr;
+    QLabel *m_opacityValueLabel = nullptr;
+    QComboBox *m_crosshairStyleCombo = nullptr;
 
-    // Erişilebilirlik
-    QCheckBox *m_highContrastCheck;
+    // Accessibility
+    QCheckBox *m_highContrastCheck = nullptr;
 
-    // Tepsi simgesi
-    QComboBox *m_trayIconCombo;
+    // Tray icon
+    QComboBox *m_trayIconCombo = nullptr;
 
-    // Arayüz - Araç görünürlüğü
-    QListWidget *m_toolVisibilityList;
+    // UI - Tool visibility
+    QListWidget *m_toolVisibilityList = nullptr;
 
-    // Kısayol
-    QKeySequenceEdit *m_hotkeyEdit;
-    QLabel *m_hotkeyStatusLabel;
+    // Shortcut
+    QKeySequenceEdit *m_hotkeyEdit = nullptr;
+    QLabel *m_hotkeyStatusLabel = nullptr;
 
-    // Dil
-    QComboBox *m_langCombo;
+    // Recording
+    QSpinBox *m_recordingFpsSpin = nullptr;
+    QSpinBox *m_recordingMaxSecSpin = nullptr;
+    QSpinBox *m_recordingLoopSpin = nullptr;
+    QLineEdit *m_imgurClientIdEdit = nullptr;
+
+    // Language
+    QComboBox *m_langCombo = nullptr;
 };
 
 #endif

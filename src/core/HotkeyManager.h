@@ -18,6 +18,8 @@ public:
     void unregisterHotkey(int id);
     void unregisterAllHotkeys();
     bool reRegisterCaptureHotkey(UINT modifiers, UINT virtualKey);
+    UINT captureModifiers() const { return m_captureModifiers; }
+    UINT captureVirtualKey() const { return m_captureVirtualKey; }
     bool nativeEventFilter(const QByteArray &eventType, void *message, qintptr *result) override;
 
 signals:
@@ -31,6 +33,8 @@ private:
     HotkeyManager& operator=(const HotkeyManager&) = delete;
 
     QList<int> m_registeredHotkeys;
+    UINT m_captureModifiers = 0;
+    UINT m_captureVirtualKey = VK_SNAPSHOT;
 
 public:
     static constexpr int HOTKEY_CAPTURE = 1;

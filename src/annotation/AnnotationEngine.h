@@ -65,7 +65,7 @@ public:
     void addCounterAnnotation(const QPoint &pos);
     bool eraseAnnotationAt(const QPoint &pos);
 
-    // Annotation taşıma
+    // Annotation move
     int findAnnotationAt(const QPoint &pos);
     void moveAnnotation(int index, const QPoint &delta);
     void setSelectedIndex(int index);

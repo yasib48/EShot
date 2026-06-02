@@ -24,6 +24,8 @@ AnnotationToolbar::AnnotationToolbar(QWidget *parent)
     , m_blurIntensityWidget(nullptr)
     , m_undoButton(nullptr)
     , m_redoButton(nullptr)
+    , m_ocrButton(nullptr)
+    , m_uploadButton(nullptr)
 {
     if (!parent) {
         setWindowFlags(Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
@@ -77,7 +79,7 @@ void AnnotationToolbar::selectTool(int toolId)
     }
     m_currentToolId = toolId;
 
-    // Bulanıklık widget'ını göster/gizle
+    // Show/hide blur widget
     if (m_blurIntensityWidget) {
         bool showBlur = (toolId == AnnotationEngine::Blur);
         m_blurIntensityWidget->setVisible(showBlur);
@@ -181,7 +183,7 @@ void AnnotationToolbar::setupUI()
     m_layout->setContentsMargins(8, 6, 8, 6);
     m_layout->setSpacing(4);
 
-    // Araç butonları
+    // Tool buttons
     m_layout->addWidget(createToolButton(":/icons/pen.svg", TranslationManager::toolPen(), AnnotationEngine::Pen, "Pen"));
     m_layout->addWidget(createToolButton(":/icons/arrow.svg", TranslationManager::toolArrow(), AnnotationEngine::Arrow, "Arrow"));
     m_layout->addWidget(createToolButton(":/icons/line.svg", TranslationManager::toolLine(), AnnotationEngine::Line, "Line"));
@@ -198,11 +200,11 @@ void AnnotationToolbar::setupUI()
 
     m_layout->addWidget(createSeparator());
 
-    // Renk butonu
+    // Color button
     m_colorButton = createColorButton(m_currentColor);
     m_layout->addWidget(m_colorButton);
 
-    // Eyedropper butonu
+    // Eyedropper button
     m_eyedropperButton = new QPushButton(this);
     m_eyedropperButton->setToolTip(TranslationManager::toolEyedropper());
     m_eyedropperButton->setCursor(Qt::PointingHandCursor);
@@ -226,7 +228,7 @@ void AnnotationToolbar::setupUI()
     connect(m_eyedropperButton, &QPushButton::clicked, this, &AnnotationToolbar::onEyedropperClicked);
     m_layout->addWidget(m_eyedropperButton);
 
-    // Seçim kilidi butonu
+    // Selection lock button
     m_lockButton = new QPushButton(this);
     m_lockButton->setToolTip(TranslationManager::actionLock());
     m_lockButton->setCursor(Qt::PointingHandCursor);
@@ -257,7 +259,7 @@ void AnnotationToolbar::setupUI()
 
     m_layout->addWidget(createSeparator());
 
-    // Kalem genişliği slider'ı
+    // Pen width slider
     QSlider *slider = new QSlider(Qt::Horizontal, this);
     slider->setRange(1, 20);
     slider->setValue(3);
@@ -283,7 +285,7 @@ void AnnotationToolbar::setupUI()
     connect(slider, &QSlider::valueChanged, this, &AnnotationToolbar::onWidthSliderChanged);
     m_layout->addWidget(slider);
 
-    // Bulanıklık şiddeti widget'ı (başlangıçta gizli)
+    // Blur strength widget (hidden by default)
     m_blurIntensityWidget = new QWidget(this);
     QHBoxLayout *blurLayout = new QHBoxLayout(m_blurIntensityWidget);
     blurLayout->setContentsMargins(0, 0, 0, 0);
@@ -321,11 +323,80 @@ void AnnotationToolbar::setupUI()
 
     m_layout->addWidget(createSeparator());
 
-    // Geri al / İleri al
+    // Undo / Redo
     m_undoButton = createActionButton(":/icons/undo.svg", TranslationManager::toolUndo(), "undo");
     m_redoButton = createActionButton(":/icons/redo.svg", TranslationManager::toolRedo(), "redo");
     m_layout->addWidget(m_undoButton);
     m_layout->addWidget(m_redoButton);
+
+    m_layout->addWidget(createSeparator());
+
+    // OCR and upload
+    m_ocrButton = new QPushButton(this);
+    m_ocrButton->setIcon(QIcon(":/icons/ocr.svg"));
+    m_ocrButton->setIconSize(QSize(18, 18));
+    m_ocrButton->setFixedSize(34, 34);
+    m_ocrButton->setToolTip(TranslationManager::actionOcr());
+    m_ocrButton->setCursor(Qt::PointingHandCursor);
+    m_ocrButton->setProperty("action", "ocr");
+    m_ocrButton->setStyleSheet(R"(
+        QPushButton {
+            background-color: #3a3a3a;
+            border: 1px solid #505050;
+            border-radius: 8px;
+        }
+        QPushButton:hover {
+            background-color: #4a4a4a;
+            border-color: #606060;
+        }
+    )");
+    connect(m_ocrButton, &QPushButton::clicked, this, &AnnotationToolbar::onActionButtonClicked);
+    m_actionButtons["ocr"] = m_ocrButton;
+    m_layout->addWidget(m_ocrButton);
+
+    m_uploadButton = new QPushButton(this);
+    m_uploadButton->setIcon(QIcon(":/icons/upload.svg"));
+    m_uploadButton->setIconSize(QSize(18, 18));
+    m_uploadButton->setFixedSize(34, 34);
+    m_uploadButton->setToolTip(TranslationManager::uploadToImgur());
+    m_uploadButton->setCursor(Qt::PointingHandCursor);
+    m_uploadButton->setProperty("action", "upload");
+    m_uploadButton->setStyleSheet(R"(
+        QPushButton {
+            background-color: #3a3a3a;
+            border: 1px solid #505050;
+            border-radius: 8px;
+        }
+        QPushButton:hover {
+            background-color: #4a4a4a;
+            border-color: #606060;
+        }
+    )");
+    connect(m_uploadButton, &QPushButton::clicked, this, &AnnotationToolbar::onActionButtonClicked);
+    m_actionButtons["upload"] = m_uploadButton;
+    m_layout->addWidget(m_uploadButton);
+
+    m_gifButton = new QPushButton(this);
+    m_gifButton->setIcon(QIcon(":/icons/record.svg"));
+    m_gifButton->setIconSize(QSize(18, 18));
+    m_gifButton->setFixedSize(34, 34);
+    m_gifButton->setToolTip(TranslationManager::recordingStartTitle());
+    m_gifButton->setCursor(Qt::PointingHandCursor);
+    m_gifButton->setProperty("action", "gif");
+    m_gifButton->setStyleSheet(R"(
+        QPushButton {
+            background-color: #3a3a3a;
+            border: 1px solid #505050;
+            border-radius: 8px;
+        }
+        QPushButton:hover {
+            background-color: #4a4a4a;
+            border-color: #606060;
+        }
+    )");
+    connect(m_gifButton, &QPushButton::clicked, this, &AnnotationToolbar::onActionButtonClicked);
+    m_actionButtons["gif"] = m_gifButton;
+    m_layout->addWidget(m_gifButton);
 
     adjustSize();
 }
@@ -457,7 +528,7 @@ void AnnotationToolbar::onToolButtonClicked()
 
     m_currentToolId = toolId;
 
-    // Bulanıklık widget'ını göster/gizle
+    // Show/hide blur widget
     if (m_blurIntensityWidget) {
         bool showBlur = (toolId == AnnotationEngine::Blur);
         m_blurIntensityWidget->setVisible(showBlur);
@@ -474,6 +545,9 @@ void AnnotationToolbar::onActionButtonClicked()
 
     if (action == "undo") emit undoRequested();
     else if (action == "redo") emit redoRequested();
+    else if (action == "ocr") emit ocrRequested();
+    else if (action == "upload") emit uploadRequested();
+    else if (action == "gif") emit gifRequested();
 }
 
 void AnnotationToolbar::onColorButtonClicked()
@@ -545,4 +619,7 @@ void AnnotationToolbar::refreshToolTips()
     if (m_colorButton) m_colorButton->setToolTip(TranslationManager::toolColor());
     if (m_eyedropperButton) m_eyedropperButton->setToolTip(TranslationManager::toolEyedropper());
     if (m_lockButton) m_lockButton->setToolTip(TranslationManager::actionLock());
+    if (m_ocrButton) m_ocrButton->setToolTip(TranslationManager::actionOcr());
+    if (m_uploadButton) m_uploadButton->setToolTip(TranslationManager::uploadToImgur());
+    if (m_gifButton) m_gifButton->setToolTip(TranslationManager::recordingStartTitle());
 }

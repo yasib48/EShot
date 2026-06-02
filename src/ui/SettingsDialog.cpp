@@ -189,6 +189,27 @@ static bool setAutoStartTask(bool enabled)
 #endif
 }
 
+static QString printScreenConflictTitle()
+{
+    return TranslationManager::currentLanguage() == TranslationManager::Turkish
+        ? QString::fromUtf8("Print Screen çakışması")
+        : QStringLiteral("Print Screen conflict");
+}
+
+static QString printScreenConflictMessage()
+{
+    return TranslationManager::currentLanguage() == TranslationManager::Turkish
+        ? QString::fromUtf8("Windows, Print Screen tuşunu Snipping Tool için kullanıyor. EShot'un Print Screen ile çalışması için bu Windows ayarını kapatmanız gerekir.")
+        : QStringLiteral("Windows is using the Print Screen key for Snipping Tool. Turn off this Windows setting to let EShot use Print Screen.");
+}
+
+static QString printScreenConflictFixText()
+{
+    return TranslationManager::currentLanguage() == TranslationManager::Turkish
+        ? QString::fromUtf8("Windows Print Screen ayarını kapat")
+        : QStringLiteral("Disable Windows Print Screen shortcut");
+}
+
 void SettingsDialog::setupUI()
 {
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
@@ -557,6 +578,19 @@ QWidget* SettingsDialog::createHotkeyTab()
     m_hotkeyStatusLabel->setStyleSheet("color: #4caf50; font-size: 12px;");
     gl->addWidget(m_hotkeyStatusLabel);
 
+    m_printScreenConflictLabel = new QLabel(printScreenConflictMessage());
+    m_printScreenConflictLabel->setWordWrap(true);
+    m_printScreenConflictLabel->setStyleSheet(
+        "background: rgba(255, 193, 7, 0.14); color: #ffd166; "
+        "border: 1px solid rgba(255, 193, 7, 0.45); border-radius: 6px; "
+        "padding: 8px; font-size: 12px;");
+    gl->addWidget(m_printScreenConflictLabel);
+
+    m_printScreenFixButton = new QPushButton(printScreenConflictFixText());
+    connect(m_printScreenFixButton, &QPushButton::clicked,
+            this, &SettingsDialog::onDisableWindowsPrintScreenSnipping);
+    gl->addWidget(m_printScreenFixButton);
+
     QPushButton *resetHkBtn = new QPushButton(TranslationManager::hotkeyReset());
     resetHkBtn->setStyleSheet("color: #aaa;");
     connect(resetHkBtn, &QPushButton::clicked, [this]() {
@@ -648,6 +682,7 @@ void SettingsDialog::loadSettings()
     m_hotkeyEdit->setKeySequence(win32ToKeySequence(savedMod, savedVKey));
     m_hotkeyStatusLabel->setText(TranslationManager::hotkeyValid());
     m_hotkeyStatusLabel->setStyleSheet("color: #4caf50; font-size: 12px;");
+    updatePrintScreenConflictUi();
 }
 
 void SettingsDialog::onHotkeyChanged(const QKeySequence &seq)
@@ -661,6 +696,38 @@ void SettingsDialog::onHotkeyChanged(const QKeySequence &seq)
         m_hotkeyStatusLabel->setText(QString("OK: %1").arg(seq.toString(QKeySequence::NativeText)));
         m_hotkeyStatusLabel->setStyleSheet("color: #4caf50; font-size: 12px;");
     }
+    updatePrintScreenConflictUi();
+}
+
+void SettingsDialog::updatePrintScreenConflictUi()
+{
+    if (!m_hotkeyEdit || !m_printScreenConflictLabel || !m_printScreenFixButton)
+        return;
+
+    UINT mod = 0, vk = 0;
+    const bool hotkeyOk = keySequenceToWin32(m_hotkeyEdit->keySequence(), mod, vk);
+    const bool showWarning = hotkeyOk
+        && HotkeyManager::isPlainPrintScreen(mod, vk)
+        && HotkeyManager::isWindowsPrintScreenSnippingEnabled();
+
+    m_printScreenConflictLabel->setVisible(showWarning);
+    m_printScreenFixButton->setVisible(showWarning);
+}
+
+void SettingsDialog::onDisableWindowsPrintScreenSnipping()
+{
+    if (!HotkeyManager::setWindowsPrintScreenSnippingEnabled(false)) {
+        QMessageBox::warning(this, printScreenConflictTitle(), TranslationManager::errTitle());
+        return;
+    }
+
+    updatePrintScreenConflictUi();
+    QMessageBox::information(
+        this,
+        printScreenConflictTitle(),
+        TranslationManager::currentLanguage() == TranslationManager::Turkish
+            ? QString::fromUtf8("Windows'un Print Screen Snipping Tool ayarı kapatıldı. Print Screen artık EShot tarafından kullanılabilir.")
+            : QStringLiteral("Windows Print Screen Snipping Tool shortcut has been disabled. Print Screen can now be used by EShot."));
 }
 
 void SettingsDialog::onFilenamePatternChanged(const QString &text)

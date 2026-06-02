@@ -5,7 +5,7 @@
 ; ============================================================
 
 #define MyAppName      "EShot"
-#define MyAppVersion   "2.4.0"
+#define MyAppVersion   "2.4.1"
 #define MyAppPublisher "EShot"
 #define MyAppURL       "https://github.com/Benoks/EShot"
 #define MyAppExeName   "EShot.exe"
@@ -63,6 +63,7 @@ turkish.OcrLangSpanish=İspanyolca OCR dili
 turkish.OcrLangItalian=İtalyanca OCR dili
 turkish.GroupComment=Ekran görüntüsü aracı
 turkish.UninstallEntry=Kaldır {#MyAppName}
+turkish.LaunchAfterInstall={#MyAppName}'ı başlat
 
 english.CreateDesktopShortcut=Create desktop shortcut
 english.AutoStartWithWindows=Auto-start with Windows
@@ -79,6 +80,7 @@ english.OcrLangSpanish=Spanish OCR language
 english.OcrLangItalian=Italian OCR language
 english.GroupComment=Screenshot tool
 english.UninstallEntry=Uninstall {#MyAppName}
+english.LaunchAfterInstall=Launch {#MyAppName}
 
 [Tasks]
 Name: "desktopicon";  Description: "{cm:CreateDesktopShortcut}"; GroupDescription: "{cm:AdditionalIcons}"
@@ -141,9 +143,9 @@ Name: "{group}\{cm:UninstallEntry}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}";  Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
 
 [Run]
-; Filename: "{app}\{#MyAppExeName}"; Description: "Launch EShot now"; Flags: nowait postinstall skipifsilent
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command ""Unregister-ScheduledTask -TaskName '{#MyAppName}' -Confirm:$false -ErrorAction SilentlyContinue"""; Flags: runhidden
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command ""$A=New-ScheduledTaskAction -Execute '{app}\{#MyAppExeName}' -Argument '--silent'; $T=New-ScheduledTaskTrigger -AtLogOn; Register-ScheduledTask -TaskName '{#MyAppName}' -Action $A -Trigger $T -RunLevel Highest -Force | Out-Null"""; Flags: runhidden; Tasks: startupicon
+Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchAfterInstall}"; Flags: nowait postinstall skipifsilent runasoriginaluser
 
 [UninstallRun]
 Filename: "{cmd}"; Parameters: "/C taskkill /F /IM {#MyAppExeName}"; Flags: runhidden; RunOnceId: "KillEShot"

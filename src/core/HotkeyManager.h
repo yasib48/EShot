@@ -20,6 +20,9 @@ public:
     bool reRegisterCaptureHotkey(UINT modifiers, UINT virtualKey);
     UINT captureModifiers() const { return m_captureModifiers; }
     UINT captureVirtualKey() const { return m_captureVirtualKey; }
+    static bool isPlainPrintScreen(UINT modifiers, UINT virtualKey);
+    static bool isWindowsPrintScreenSnippingEnabled();
+    static bool setWindowsPrintScreenSnippingEnabled(bool enabled);
     bool nativeEventFilter(const QByteArray &eventType, void *message, qintptr *result) override;
 
 signals:

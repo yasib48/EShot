@@ -2,11 +2,16 @@
 #define FIRSTRUNWIZARD_H
 
 #include <QDialog>
-#include <QStackedWidget>
+#include <QLabel>
+
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
 
 class QComboBox;
 class QKeySequenceEdit;
 class QLineEdit;
+class QPushButton;
 
 class FirstRunWizard : public QDialog {
     Q_OBJECT
@@ -18,25 +23,23 @@ public:
     static bool shouldShow();
 
 private slots:
-    void onNext();
-    void onBack();
+    void onBrowse();
     void onFinish();
+    void onHotkeyChanged();
+    void onDisableWindowsPrintScreenSnipping();
 
 private:
-    void setupPages();
-    void showPage(int index);
+    void setupUi();
+    void loadDefaults();
+    void updatePrintScreenConflictUi();
+    static bool keySequenceToWin32(const QKeySequence &seq, UINT &modifiers, UINT &vkey);
 
-    int m_currentPage;
-    QStackedWidget *m_stack;
-
-    // Page 1: Language
-    QComboBox *m_langCombo;
-
-    // Page 2: Shortcut
-    QKeySequenceEdit *m_hotkeyEdit;
-
-    // Page 3: Save path
-    QLineEdit *m_savePathEdit;
+    QComboBox *m_langCombo = nullptr;
+    QKeySequenceEdit *m_hotkeyEdit = nullptr;
+    QLabel *m_hotkeyStatusLabel = nullptr;
+    QLabel *m_printScreenConflictLabel = nullptr;
+    QPushButton *m_printScreenFixButton = nullptr;
+    QLineEdit *m_savePathEdit = nullptr;
 };
 
 #endif

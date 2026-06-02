@@ -48,6 +48,36 @@ bool HotkeyManager::registerHotkey(int id, UINT modifiers, UINT virtualKey)
     return false;
 }
 
+bool HotkeyManager::isPlainPrintScreen(UINT modifiers, UINT virtualKey)
+{
+    return modifiers == 0 && virtualKey == VK_SNAPSHOT;
+}
+
+bool HotkeyManager::isWindowsPrintScreenSnippingEnabled()
+{
+#ifdef Q_OS_WIN
+    QSettings reg(QStringLiteral("HKEY_CURRENT_USER\\Control Panel\\Keyboard"),
+                  QSettings::NativeFormat);
+    return reg.value(QStringLiteral("PrintScreenKeyForSnippingEnabled"), 0).toInt() != 0;
+#else
+    return false;
+#endif
+}
+
+bool HotkeyManager::setWindowsPrintScreenSnippingEnabled(bool enabled)
+{
+#ifdef Q_OS_WIN
+    QSettings reg(QStringLiteral("HKEY_CURRENT_USER\\Control Panel\\Keyboard"),
+                  QSettings::NativeFormat);
+    reg.setValue(QStringLiteral("PrintScreenKeyForSnippingEnabled"), enabled ? 1 : 0);
+    reg.sync();
+    return reg.status() == QSettings::NoError;
+#else
+    Q_UNUSED(enabled);
+    return false;
+#endif
+}
+
 void HotkeyManager::unregisterHotkey(int id)
 {
     UnregisterHotKey(nullptr, id);

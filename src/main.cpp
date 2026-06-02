@@ -152,6 +152,29 @@ public slots:
         }
     }
 
+    void onFixPrintScreenConflict()
+    {
+        if (!HotkeyManager::setWindowsPrintScreenSnippingEnabled(false)) {
+            if (m_trayIcon) {
+                m_trayIcon->showMessage(
+                    QStringLiteral("EShot"),
+                    QStringLiteral("Could not change the Windows Print Screen setting. Open Settings > Accessibility > Keyboard and turn off the Print Screen Snipping Tool option."),
+                    QSystemTrayIcon::Warning,
+                    7000);
+            }
+            return;
+        }
+
+        if (m_trayIcon) {
+            m_trayIcon->showMessage(
+                QStringLiteral("EShot"),
+                QStringLiteral("Windows Print Screen Snipping Tool shortcut disabled. Print Screen should now open EShot."),
+                QSystemTrayIcon::Information,
+                4000);
+        }
+        rebuildTrayMenu();
+    }
+
     void onAboutRequested()
     {
         AboutDialog dlg;
@@ -255,6 +278,15 @@ private:
 
         m_trayMenu->addSeparator();
 
+        if (hasPrintScreenConflict()) {
+            QAction *fixPrintScreenAction = m_trayMenu->addAction(
+                QIcon(":/icons/gear.svg"),
+                QStringLiteral("Fix Print Screen shortcut"));
+            connect(fixPrintScreenAction, &QAction::triggered,
+                    this, &EShotApp::onFixPrintScreenConflict);
+            m_trayMenu->addSeparator();
+        }
+
         if (m_updateAvailable) {
             QAction *updateAction = m_trayMenu->addAction(
                 QIcon(":/icons/upload.svg"),
@@ -339,6 +371,14 @@ private:
     {
         connect(&HotkeyManager::instance(), &HotkeyManager::captureRequested,
                 this, &EShotApp::onCaptureRequested);
+    }
+
+    bool hasPrintScreenConflict() const
+    {
+        return HotkeyManager::isPlainPrintScreen(
+                   HotkeyManager::instance().captureModifiers(),
+                   HotkeyManager::instance().captureVirtualKey())
+            && HotkeyManager::isWindowsPrintScreenSnippingEnabled();
     }
 
     void checkForUpdates()

@@ -12,6 +12,7 @@
 #include <QLabel>
 #include <QListWidget>
 #include <QKeySequenceEdit>
+#include <QPushButton>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -32,6 +33,7 @@ private slots:
     void onSelectAllTools();
     void onDeselectAllTools();
     void onHotkeyChanged(const QKeySequence &seq);
+    void onDisableWindowsPrintScreenSnipping();
     void onExportSettings();
     void onImportSettings();
     void onThemeChanged();
@@ -47,6 +49,7 @@ private:
     QWidget* createHotkeyTab();
 
     QString resolvePatternPreview(const QString &pattern) const;
+    void updatePrintScreenConflictUi();
 
     // Resolve shortcut to Win32 VK + modifier
     static bool keySequenceToWin32(const QKeySequence &seq, UINT &modifiers, UINT &vkey);
@@ -89,6 +92,8 @@ private:
     // Shortcut
     QKeySequenceEdit *m_hotkeyEdit = nullptr;
     QLabel *m_hotkeyStatusLabel = nullptr;
+    QLabel *m_printScreenConflictLabel = nullptr;
+    QPushButton *m_printScreenFixButton = nullptr;
 
     // Recording
     QSpinBox *m_recordingFpsSpin = nullptr;

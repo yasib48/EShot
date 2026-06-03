@@ -154,8 +154,23 @@ static QKeySequence win32ToKeySequence(UINT modifiers, UINT vkey)
 bool SettingsDialog::isAutoStartEnabled()
 {
 #ifdef Q_OS_WIN
-    return QProcess::execute(QStringLiteral("schtasks"),
-                             {QStringLiteral("/Query"), QStringLiteral("/TN"), QStringLiteral("EShot")}) == 0;
+    auto queryTaskXml = [](const QString &taskName) {
+        QProcess query;
+        query.start(QStringLiteral("schtasks"),
+                    {QStringLiteral("/Query"), QStringLiteral("/TN"), taskName, QStringLiteral("/XML")});
+        if (!query.waitForFinished(3000) || query.exitCode() != 0)
+            return QString();
+        return QString::fromLocal8Bit(query.readAllStandardOutput());
+    };
+
+    QString xml = queryTaskXml(QStringLiteral("EShot"));
+    if (xml.isEmpty())
+        xml = queryTaskXml(QStringLiteral("\\EShot"));
+    if (xml.isEmpty())
+        return false;
+
+    QString appPath = QCoreApplication::applicationFilePath().replace('/', '\\');
+    return xml.contains(appPath, Qt::CaseInsensitive);
 #else
     return false;
 #endif
@@ -175,14 +190,24 @@ static bool setAutoStartTask(bool enabled)
         return true;
 
     QString appPath = QCoreApplication::applicationFilePath().replace('/', '\\');
-    QString taskCommand = QStringLiteral("\"%1\" --silent").arg(appPath);
-    return QProcess::execute(QStringLiteral("schtasks"),
-                             {QStringLiteral("/Create"),
-                              QStringLiteral("/TN"), QStringLiteral("EShot"),
-                              QStringLiteral("/SC"), QStringLiteral("ONLOGON"),
-                              QStringLiteral("/RL"), QStringLiteral("HIGHEST"),
-                              QStringLiteral("/TR"), taskCommand,
-                              QStringLiteral("/F")}) == 0;
+    QString psPath = appPath;
+    psPath.replace(QStringLiteral("'"), QStringLiteral("''"));
+    QString script = QStringLiteral(
+        "Unregister-ScheduledTask -TaskName 'EShot' -Confirm:$false -ErrorAction SilentlyContinue; "
+        "$User=[System.Security.Principal.WindowsIdentity]::GetCurrent().Name; "
+        "$A=New-ScheduledTaskAction -Execute '%1' -Argument '--silent'; "
+        "$T=New-ScheduledTaskTrigger -AtLogOn -User $User; "
+        "$T.Delay='PT30S'; "
+        "$P=New-ScheduledTaskPrincipal -UserId $User -LogonType Interactive -RunLevel Highest; "
+        "$S=New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries; "
+        "Register-ScheduledTask -TaskName 'EShot' -Action $A -Trigger $T -Principal $P -Settings $S -Force | Out-Null")
+        .arg(psPath);
+
+    return QProcess::execute(QStringLiteral("powershell.exe"),
+                             {QStringLiteral("-NoProfile"),
+                              QStringLiteral("-ExecutionPolicy"), QStringLiteral("Bypass"),
+                              QStringLiteral("-WindowStyle"), QStringLiteral("Hidden"),
+                              QStringLiteral("-Command"), script}) == 0;
 #else
     Q_UNUSED(enabled);
     return true;

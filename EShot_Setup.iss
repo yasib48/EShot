@@ -5,7 +5,7 @@
 ; ============================================================
 
 #define MyAppName      "EShot"
-#define MyAppVersion   "2.4.3"
+#define MyAppVersion   "2.4.4"
 #define MyAppPublisher "EShot"
 #define MyAppURL       "https://github.com/Benoks/EShot"
 #define MyAppExeName   "EShot.exe"
@@ -146,7 +146,7 @@ Name: "{autodesktop}\{#MyAppName}";  Filename: "{app}\{#MyAppExeName}"; Tasks: d
 
 [Run]
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command ""Unregister-ScheduledTask -TaskName '{#MyAppName}' -Confirm:$false -ErrorAction SilentlyContinue"""; Flags: runhidden
-Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command ""$A=New-ScheduledTaskAction -Execute '{app}\{#MyAppExeName}' -Argument '--silent'; $T=New-ScheduledTaskTrigger -AtLogOn; Register-ScheduledTask -TaskName '{#MyAppName}' -Action $A -Trigger $T -RunLevel Highest -Force | Out-Null"""; Flags: runhidden; Tasks: startupicon
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command ""$User=[System.Security.Principal.WindowsIdentity]::GetCurrent().Name; $A=New-ScheduledTaskAction -Execute '{app}\{#MyAppExeName}' -Argument '--silent'; $T=New-ScheduledTaskTrigger -AtLogOn -User $User; $T.Delay='PT30S'; $P=New-ScheduledTaskPrincipal -UserId $User -LogonType Interactive -RunLevel Highest; $S=New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries; Register-ScheduledTask -TaskName '{#MyAppName}' -Action $A -Trigger $T -Principal $P -Settings $S -Force | Out-Null"""; Flags: runhidden; Tasks: startupicon
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchAfterInstall}"; Flags: shellexec nowait postinstall skipifsilent
 
 [UninstallRun]

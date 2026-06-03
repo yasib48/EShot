@@ -798,8 +798,7 @@ int main(int argc, char *argv[])
     }
 
     if (!QSystemTrayIcon::isSystemTrayAvailable()) {
-        qWarning() << "[EShot] System tray is not available!";
-        return 1;
+        qWarning() << "[EShot] System tray is not available yet; keeping the app alive for Windows startup.";
     }
 
     const QString instanceName = QStringLiteral("EShot.SingleInstance");

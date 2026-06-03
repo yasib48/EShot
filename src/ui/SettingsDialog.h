@@ -85,6 +85,7 @@ private:
 
     // UI - Tool visibility
     QListWidget *m_toolVisibilityList = nullptr;
+    QListWidget *m_toolbarControlVisibilityList = nullptr;
 
     // Shortcut
     QKeySequenceEdit *m_hotkeyEdit = nullptr;

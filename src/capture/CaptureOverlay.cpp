@@ -974,36 +974,35 @@ void CaptureOverlay::showToolbar()
     int margin = 12;
 
     m_toolbar->refreshTools();
-    if (!m_toolbar->hasVisibleTools()) {
-        hideToolbar();
-        return;
+
+    if (m_toolbar->hasVisibleTools()) {
+        // --- Bottom toolbar: below the selection, centered ---
+        m_toolbar->adjustSize();
+        int th = m_toolbar->height();
+        int toolbarWidth = m_toolbar->width();
+
+        int tx = selRect.center().x() - toolbarWidth / 2;
+        int ty = selRect.bottom() + margin;
+
+        // Check screen bounds
+        if (tx < 5) tx = 5;
+        if (tx + toolbarWidth > width() - 5) tx = width() - toolbarWidth - 5;
+        if (ty + th > height() - 5) {
+            // If it does not fit below, try above
+            ty = selRect.top() - th - margin;
+        }
+        if (ty < 5) {
+            // If it also does not fit above, dock to bottom inside the frame
+            ty = selRect.bottom() - th - 2;
+        }
+
+        m_toolbar->setFixedWidth(toolbarWidth);
+        m_toolbar->move(tx, ty);
+        m_toolbar->show();
+        m_toolbar->raise();
+    } else {
+        m_toolbar->hide();
     }
-
-    // --- Bottom toolbar: below the selection, centered ---
-    m_toolbar->adjustSize();
-    int th = m_toolbar->height();
-    int toolbarWidth = m_toolbar->width();
-    int minToolbarWidth = toolbarWidth; // Minimum width for buttons
-
-    int tx = selRect.center().x() - toolbarWidth / 2;
-    int ty = selRect.bottom() + margin;
-
-    // Check screen bounds
-    if (tx < 5) tx = 5;
-    if (tx + toolbarWidth > width() - 5) tx = width() - toolbarWidth - 5;
-    if (ty + th > height() - 5) {
-        // If it does not fit below, try above
-        ty = selRect.top() - th - margin;
-    }
-    if (ty < 5) {
-        // If it also does not fit above, dock to bottom inside the frame
-        ty = selRect.bottom() - th - 2;
-    }
-
-    m_toolbar->setFixedWidth(toolbarWidth);
-    m_toolbar->move(tx, ty);
-    m_toolbar->show();
-    m_toolbar->raise();
 
     // --- Right panel: right of selection, vertically centered ---
     if (m_actionPanel) {
@@ -1012,22 +1011,28 @@ void CaptureOverlay::showToolbar()
         int ph = m_actionPanel->height();
         int px = selRect.right() + margin;
         int py = selRect.center().y() - ph / 2;
+        bool dockedInside = false;
 
-        // If it does not fit to the right, dock inside the selected frame.
-        if (px + pw > width() - 5 || px + pw > selRect.right()) {
-            px = selRect.right() - pw - 2;
+        if (px + pw > width() - 5) {
+            int leftOutside = selRect.left() - margin - pw;
+            if (leftOutside >= 5) {
+                px = leftOutside;
+            } else {
+                px = selRect.right() - pw - 2;
+                dockedInside = true;
+            }
         }
 
-        if (px < selRect.left() + 2)
+        if (dockedInside && px < selRect.left() + 2)
             px = selRect.left() + 2;
         if (px + pw > width() - 5)
             px = width() - pw - 5;
         if (px < 5)
             px = 5;
 
-        if (py < selRect.top() + 2)
+        if (dockedInside && py < selRect.top() + 2)
             py = selRect.top() + 2;
-        if (py + ph > selRect.bottom() - 2)
+        if (dockedInside && py + ph > selRect.bottom() - 2)
             py = selRect.bottom() - ph - 2;
         if (py < 5)
             py = 5;

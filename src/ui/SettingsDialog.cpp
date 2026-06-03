@@ -19,11 +19,42 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QProcess>
+#include <QColor>
+#include <QFont>
+#include <QAbstractItemView>
+#include <QIcon>
 #include <algorithm>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
 #endif
+
+namespace {
+QString uiLabel(const char *tr, const char *en)
+{
+    return TranslationManager::currentLanguage() == TranslationManager::Turkish
+        ? QString::fromUtf8(tr)
+        : QString::fromLatin1(en);
+}
+
+QStringList defaultAnnotationTools()
+{
+    return {"Pen","Arrow","Line","Rectangle","Circle","Text","Highlighter","SemiRect","Blur","Counter","Eraser"};
+}
+
+QStringList defaultToolbarControls()
+{
+    return {"Color","Eyedropper","Lock","Width","TextOptions","BlurIntensity","Undo","Redo","Ocr","Upload","Gif"};
+}
+
+QString cleanToolLabel(const QString &label)
+{
+    int space = label.indexOf(' ');
+    if (space > 0 && !label.at(0).isLetterOrNumber())
+        return label.mid(space + 1);
+    return label;
+}
+}
 
 SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent)
 {
@@ -500,42 +531,126 @@ QWidget* SettingsDialog::createInterfaceTab()
 {
     QWidget *tab = new QWidget();
     QVBoxLayout *layout = new QVBoxLayout(tab);
+    layout->setContentsMargins(10, 10, 10, 10);
+    layout->setSpacing(8);
 
     QGroupBox *toolsGroup = new QGroupBox(TranslationManager::toolbarVisibility());
     QVBoxLayout *toolsLayout = new QVBoxLayout(toolsGroup);
+    toolsLayout->setContentsMargins(10, 10, 10, 10);
+    toolsLayout->setSpacing(8);
 
     QLabel *infoLabel = new QLabel(TranslationManager::toolbarDesc());
-    infoLabel->setStyleSheet("color: #999;");
+    infoLabel->setWordWrap(true);
+    infoLabel->setStyleSheet("color: #aaa; font-size: 12px;");
     toolsLayout->addWidget(infoLabel);
 
-    m_toolVisibilityList = new QListWidget();
-    m_toolVisibilityList->setAlternatingRowColors(true);
-
-    struct ToolInfo { QString key; QString label; };
-    QVector<ToolInfo> tools = {
-        {"Pen",         TranslationManager::toolListPen()},
-        {"Arrow",       TranslationManager::toolListArrow()},
-        {"Line",        TranslationManager::toolListLine()},
-        {"Rectangle",   TranslationManager::toolListRect()},
-        {"SemiRect",    TranslationManager::toolListSemiRect()},
-        {"Circle",      TranslationManager::toolListCircle()},
-        {"Text",        TranslationManager::toolListText()},
-        {"Highlighter", TranslationManager::toolListHighlight()},
-        {"Blur",        TranslationManager::toolListBlur()},
-        {"Counter",     TranslationManager::toolListCounter()},
-        {"Eraser",      TranslationManager::toolListEraser()},
+    auto configureList = [](QListWidget *list) {
+        list->setAlternatingRowColors(false);
+        list->setSelectionMode(QAbstractItemView::NoSelection);
+        list->setFocusPolicy(Qt::NoFocus);
+        list->setIconSize(QSize(18, 18));
+        list->setSpacing(1);
+        list->setMinimumHeight(300);
+        list->setMaximumHeight(330);
+        list->setStyleSheet(R"(
+        QListWidget {
+            background: #252525;
+            border: 1px solid #3d3d3d;
+            border-radius: 6px;
+            padding: 6px;
+        }
+        QListWidget::item {
+            min-height: 24px;
+            border-radius: 4px;
+            padding: 2px 6px;
+        }
+        QListWidget::item:hover {
+            background: #303030;
+        }
+        QListWidget::indicator {
+            width: 16px;
+            height: 16px;
+        }
+    )");
     };
 
-    for (const auto &t : tools) {
-        QListWidgetItem *item = new QListWidgetItem(t.label);
-        item->setData(Qt::UserRole, t.key);
+    auto addOption = [](QListWidget *list, const QString &category, const QString &key, const QString &label, const QString &iconPath) {
+        QListWidgetItem *item = new QListWidgetItem(cleanToolLabel(label));
+        if (!iconPath.isEmpty())
+            item->setIcon(QIcon(iconPath));
+        item->setData(Qt::UserRole, key);
+        item->setData(Qt::UserRole + 1, category);
         item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
         item->setCheckState(Qt::Checked);
-        m_toolVisibilityList->addItem(item);
+        list->addItem(item);
+    };
+
+    struct ToolInfo { QString key; QString label; QString icon; };
+    QVector<ToolInfo> tools = {
+        {"Pen",         TranslationManager::toolListPen(),       ":/icons/pen.svg"},
+        {"Arrow",       TranslationManager::toolListArrow(),     ":/icons/arrow.svg"},
+        {"Line",        TranslationManager::toolListLine(),      ":/icons/line.svg"},
+        {"Rectangle",   TranslationManager::toolListRect(),      ":/icons/rectangle.svg"},
+        {"SemiRect",    TranslationManager::toolListSemiRect(),  ":/icons/semirect.svg"},
+        {"Circle",      TranslationManager::toolListCircle(),    ":/icons/circle.svg"},
+        {"Text",        TranslationManager::toolListText(),      ":/icons/text.svg"},
+        {"Highlighter", TranslationManager::toolListHighlight(), ":/icons/highlighter.svg"},
+        {"Blur",        TranslationManager::toolListBlur(),      ":/icons/blur.svg"},
+        {"Counter",     TranslationManager::toolListCounter(),   ":/icons/counter.svg"},
+        {"Eraser",      TranslationManager::toolListEraser(),    ":/icons/eraser.svg"},
+    };
+
+    QVector<ToolInfo> controls = {
+        {"Color",         TranslationManager::toolColor(),                    ":/icons/color.svg"},
+        {"Eyedropper",    TranslationManager::toolEyedropper(),               ":/icons/eyedropper.svg"},
+        {"Lock",          TranslationManager::actionLock(),                   ":/icons/lock_open.svg"},
+        {"Width",         TranslationManager::toolWidth(),                    ":/icons/pen.svg"},
+        {"TextOptions",   uiLabel("Metin font kontrolleri", "Text font controls"), ":/icons/text.svg"},
+        {"BlurIntensity", TranslationManager::toolBlurIntensity(),            ":/icons/blur.svg"},
+        {"Undo",          TranslationManager::toolUndo(),                     ":/icons/undo.svg"},
+        {"Redo",          TranslationManager::toolRedo(),                     ":/icons/redo.svg"},
+        {"Ocr",           TranslationManager::actionOcr(),                    ":/icons/ocr.svg"},
+        {"Upload",        TranslationManager::uploadToService(),              ":/icons/upload.svg"},
+        {"Gif",           TranslationManager::recordingStartTitle(),          ":/icons/record.svg"},
+    };
+
+    QWidget *columns = new QWidget(toolsGroup);
+    QHBoxLayout *columnsLayout = new QHBoxLayout(columns);
+    columnsLayout->setContentsMargins(0, 0, 0, 0);
+    columnsLayout->setSpacing(10);
+
+    auto makeColumn = [&](const QString &title, QListWidget **listPtr) {
+        QWidget *column = new QWidget(columns);
+        QVBoxLayout *columnLayout = new QVBoxLayout(column);
+        columnLayout->setContentsMargins(0, 0, 0, 0);
+        columnLayout->setSpacing(5);
+
+        QLabel *titleLabel = new QLabel(title, column);
+        titleLabel->setStyleSheet("color: #8ab4f8; font-weight: 600; font-size: 12px;");
+        columnLayout->addWidget(titleLabel);
+
+        *listPtr = new QListWidget(column);
+        configureList(*listPtr);
+        columnLayout->addWidget(*listPtr);
+        return column;
+    };
+
+    QWidget *drawingColumn = makeColumn(uiLabel("Çizim araçları", "Drawing tools"), &m_toolVisibilityList);
+    QWidget *controlColumn = makeColumn(uiLabel("Alt toolbar kontrolleri", "Bottom toolbar controls"), &m_toolbarControlVisibilityList);
+    columnsLayout->addWidget(drawingColumn, 1);
+    columnsLayout->addWidget(controlColumn, 1);
+
+    for (const auto &t : tools) {
+        addOption(m_toolVisibilityList, QStringLiteral("tool"), t.key, t.label, t.icon);
     }
-    toolsLayout->addWidget(m_toolVisibilityList);
+    for (const auto &c : controls) {
+        addOption(m_toolbarControlVisibilityList, QStringLiteral("control"), c.key, c.label, c.icon);
+    }
+
+    toolsLayout->addWidget(columns);
 
     QHBoxLayout *selBtnLayout = new QHBoxLayout();
+    selBtnLayout->setSpacing(8);
     QPushButton *selectAllBtn   = new QPushButton(TranslationManager::selectAll());
     QPushButton *deselectAllBtn = new QPushButton(TranslationManager::deselectAll());
     connect(selectAllBtn,   &QPushButton::clicked, this, &SettingsDialog::onSelectAllTools);
@@ -675,14 +790,19 @@ void SettingsDialog::loadSettings()
 
     m_highContrastCheck->setChecked(m_settings->value("highContrast", false).toBool());
 
-    QStringList visibleTools = m_settings->value("visibleTools",
-        QStringList{"Pen","Arrow","Line","Rectangle","Circle","Text","Highlighter","SemiRect","Blur","Counter","Eraser"})
-        .toStringList();
-    for (int i = 0; i < m_toolVisibilityList->count(); ++i) {
-        QListWidgetItem *item = m_toolVisibilityList->item(i);
-        QString key = item->data(Qt::UserRole).toString();
-        item->setCheckState(visibleTools.contains(key) ? Qt::Checked : Qt::Unchecked);
-    }
+    QStringList visibleTools = m_settings->value("visibleTools", defaultAnnotationTools()).toStringList();
+    QStringList visibleToolbarControls = m_settings->value("visibleToolbarControls", defaultToolbarControls()).toStringList();
+    auto applyVisibility = [](QListWidget *list, const QStringList &visible) {
+        if (!list) return;
+        for (int i = 0; i < list->count(); ++i) {
+            QListWidgetItem *item = list->item(i);
+            QString key = item->data(Qt::UserRole).toString();
+            if (!key.isEmpty())
+                item->setCheckState(visible.contains(key) ? Qt::Checked : Qt::Unchecked);
+        }
+    };
+    applyVisibility(m_toolVisibilityList, visibleTools);
+    applyVisibility(m_toolbarControlVisibilityList, visibleToolbarControls);
 
     UINT savedMod  = static_cast<UINT>(m_settings->value("hotkeyModifiers", 0).toUInt());
     UINT savedVKey = static_cast<UINT>(m_settings->value("hotkeyVKey", VK_SNAPSHOT).toUInt());
@@ -759,14 +879,26 @@ void SettingsDialog::onBrowse()
 
 void SettingsDialog::onSelectAllTools()
 {
-    for (int i = 0; i < m_toolVisibilityList->count(); ++i)
-        m_toolVisibilityList->item(i)->setCheckState(Qt::Checked);
+    for (QListWidget *list : {m_toolVisibilityList, m_toolbarControlVisibilityList}) {
+        if (!list) continue;
+        for (int i = 0; i < list->count(); ++i) {
+            QListWidgetItem *item = list->item(i);
+            if (!item->data(Qt::UserRole).toString().isEmpty())
+                item->setCheckState(Qt::Checked);
+        }
+    }
 }
 
 void SettingsDialog::onDeselectAllTools()
 {
-    for (int i = 0; i < m_toolVisibilityList->count(); ++i)
-        m_toolVisibilityList->item(i)->setCheckState(Qt::Unchecked);
+    for (QListWidget *list : {m_toolVisibilityList, m_toolbarControlVisibilityList}) {
+        if (!list) continue;
+        for (int i = 0; i < list->count(); ++i) {
+            QListWidgetItem *item = list->item(i);
+            if (!item->data(Qt::UserRole).toString().isEmpty())
+                item->setCheckState(Qt::Unchecked);
+        }
+    }
 }
 
 void SettingsDialog::onSave()
@@ -837,12 +969,22 @@ void SettingsDialog::onSave()
     m_settings->setValue("highContrast",       m_highContrastCheck->isChecked());
 
     QStringList visibleTools;
-    for (int i = 0; i < m_toolVisibilityList->count(); ++i) {
-        QListWidgetItem *item = m_toolVisibilityList->item(i);
-        if (item->checkState() == Qt::Checked)
-            visibleTools.append(item->data(Qt::UserRole).toString());
-    }
+    QStringList visibleToolbarControls;
+    auto collectVisible = [](QListWidget *list) {
+        QStringList result;
+        if (!list) return result;
+        for (int i = 0; i < list->count(); ++i) {
+            QListWidgetItem *item = list->item(i);
+            QString key = item->data(Qt::UserRole).toString();
+            if (!key.isEmpty() && item->checkState() == Qt::Checked)
+                result.append(key);
+        }
+        return result;
+    };
+    visibleTools = collectVisible(m_toolVisibilityList);
+    visibleToolbarControls = collectVisible(m_toolbarControlVisibilityList);
     m_settings->setValue("visibleTools", visibleTools);
+    m_settings->setValue("visibleToolbarControls", visibleToolbarControls);
 
     m_settings->setValue("hotkeyModifiers", newMod);
     m_settings->setValue("hotkeyVKey",      newVKey);
@@ -902,12 +1044,20 @@ void SettingsDialog::onExportSettings()
     obj["highContrast"] = m_highContrastCheck->isChecked();
 
     QJsonArray tools;
-    for (int i = 0; i < m_toolVisibilityList->count(); ++i) {
-        QListWidgetItem *item = m_toolVisibilityList->item(i);
-        if (item->checkState() == Qt::Checked)
-            tools.append(item->data(Qt::UserRole).toString());
-    }
+    QJsonArray toolbarControls;
+    auto appendChecked = [](QListWidget *list, QJsonArray &array) {
+        if (!list) return;
+        for (int i = 0; i < list->count(); ++i) {
+            QListWidgetItem *item = list->item(i);
+            QString key = item->data(Qt::UserRole).toString();
+            if (!key.isEmpty() && item->checkState() == Qt::Checked)
+                array.append(key);
+        }
+    };
+    appendChecked(m_toolVisibilityList, tools);
+    appendChecked(m_toolbarControlVisibilityList, toolbarControls);
     obj["visibleTools"] = tools;
+    obj["visibleToolbarControls"] = toolbarControls;
 
     QKeySequence seq = m_hotkeyEdit->keySequence();
     UINT mod = 0, vk = 0;
@@ -986,9 +1136,22 @@ void SettingsDialog::onImportSettings()
         QJsonArray tools = obj["visibleTools"].toArray();
         QStringList visibleTools;
         for (const auto &t : tools) visibleTools.append(t.toString());
-        for (int i = 0; i < m_toolVisibilityList->count(); ++i) {
-            QListWidgetItem *item = m_toolVisibilityList->item(i);
-            item->setCheckState(visibleTools.contains(item->data(Qt::UserRole).toString()) ? Qt::Checked : Qt::Unchecked);
+        if (m_toolVisibilityList) {
+            for (int i = 0; i < m_toolVisibilityList->count(); ++i) {
+                QListWidgetItem *item = m_toolVisibilityList->item(i);
+                item->setCheckState(visibleTools.contains(item->data(Qt::UserRole).toString()) ? Qt::Checked : Qt::Unchecked);
+            }
+        }
+    }
+    if (obj.contains("visibleToolbarControls")) {
+        QJsonArray controls = obj["visibleToolbarControls"].toArray();
+        QStringList visibleControls;
+        for (const auto &c : controls) visibleControls.append(c.toString());
+        if (m_toolbarControlVisibilityList) {
+            for (int i = 0; i < m_toolbarControlVisibilityList->count(); ++i) {
+                QListWidgetItem *item = m_toolbarControlVisibilityList->item(i);
+                item->setCheckState(visibleControls.contains(item->data(Qt::UserRole).toString()) ? Qt::Checked : Qt::Unchecked);
+            }
         }
     }
     if (obj.contains("hotkeyModifiers") && obj.contains("hotkeyVKey")) {

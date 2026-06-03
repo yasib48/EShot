@@ -56,6 +56,7 @@ private slots:
 private:
     void setupUI();
     void applyStyles();
+    void updateDynamicOptionVisibility();
     QPushButton* createToolButton(const QString &iconPath, const QString &tooltip,
                                   int toolId, const QString &settingsKey);
     QPushButton* createActionButton(const QString &iconPath, const QString &tooltip,
@@ -64,14 +65,18 @@ private:
     QWidget* createSeparator();
 
     bool isToolVisible(const QString &key) const;
+    bool isControlVisible(const QString &key) const;
 
     QHBoxLayout *m_layout;
     QMap<int, QPushButton*> m_toolButtons;
     QMap<QString, QPushButton*> m_actionButtons;
+    QMap<QString, QWidget*> m_optionalControls;
     QPushButton *m_colorButton;
+    QSlider *m_widthSlider;
     int m_currentToolId;
     QColor m_currentColor;
     QStringList m_visibleTools;
+    QStringList m_visibleControls;
 
     // New: Eyedropper
     QPushButton *m_eyedropperButton;

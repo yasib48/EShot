@@ -12,10 +12,23 @@
 #include <QFontComboBox>
 #include <QSpinBox>
 
+namespace {
+QStringList defaultAnnotationTools()
+{
+    return {"Pen","Arrow","Line","Rectangle","Circle","Text","Highlighter","SemiRect","Blur","Counter","Eraser"};
+}
+
+QStringList defaultToolbarControls()
+{
+    return {"Color","Eyedropper","Lock","Width","TextOptions","BlurIntensity","Undo","Redo","Ocr","Upload","Gif"};
+}
+}
+
 AnnotationToolbar::AnnotationToolbar(QWidget *parent)
     : QWidget(parent)
     , m_layout(nullptr)
     , m_colorButton(nullptr)
+    , m_widthSlider(nullptr)
     , m_currentToolId(-1)
     , m_currentColor(Qt::red)
     , m_eyedropperButton(nullptr)
@@ -43,9 +56,8 @@ AnnotationToolbar::AnnotationToolbar(QWidget *parent)
     setMinimumWidth(500);
 
     QSettings s("EShot", "EShot");
-    m_visibleTools = s.value("visibleTools",
-        QStringList{"Pen","Arrow","Line","Rectangle","Circle","Text","Highlighter","SemiRect","Blur","Counter","Eraser"})
-        .toStringList();
+    m_visibleTools = s.value("visibleTools", defaultAnnotationTools()).toStringList();
+    m_visibleControls = s.value("visibleToolbarControls", defaultToolbarControls()).toStringList();
 
     setupUI();
     applyStyles();
@@ -58,12 +70,19 @@ bool AnnotationToolbar::isToolVisible(const QString &key) const
     return m_visibleTools.contains(key);
 }
 
+bool AnnotationToolbar::isControlVisible(const QString &key) const
+{
+    return m_visibleControls.contains(key);
+}
+
 void AnnotationToolbar::refreshTools()
 {
     QSettings s("EShot", "EShot");
-    m_visibleTools = s.value("visibleTools",
-        QStringList{"Pen","Arrow","Line","Rectangle","Circle","Text","Highlighter","SemiRect","Blur","Counter","Eraser"})
-        .toStringList();
+    m_visibleTools = s.value("visibleTools", defaultAnnotationTools()).toStringList();
+    m_visibleControls = s.value("visibleToolbarControls", defaultToolbarControls()).toStringList();
+
+    setMinimumWidth(0);
+    setMaximumWidth(QWIDGETSIZE_MAX);
 
     for (auto btn : m_toolButtons) {
         QString key = btn->property("settingsKey").toString();
@@ -71,16 +90,41 @@ void AnnotationToolbar::refreshTools()
             btn->setVisible(isToolVisible(key));
         }
     }
+    for (auto it = m_optionalControls.begin(); it != m_optionalControls.end(); ++it) {
+        if (it.value())
+            it.value()->setVisible(isControlVisible(it.key()));
+    }
+    updateDynamicOptionVisibility();
+    if (m_layout)
+        m_layout->activate();
     adjustSize();
+    setFixedWidth(sizeHint().width());
+    updateGeometry();
 }
 
 bool AnnotationToolbar::hasVisibleTools() const
 {
     for (auto btn : m_toolButtons) {
-        if (btn && btn->isVisible())
+        if (btn && !btn->isHidden())
+            return true;
+    }
+    for (auto control : m_optionalControls) {
+        if (control && !control->isHidden())
             return true;
     }
     return false;
+}
+
+void AnnotationToolbar::updateDynamicOptionVisibility()
+{
+    if (m_blurIntensityWidget) {
+        m_blurIntensityWidget->setVisible(
+            m_currentToolId == AnnotationEngine::Blur && isControlVisible("BlurIntensity"));
+    }
+    if (m_textOptionsWidget) {
+        m_textOptionsWidget->setVisible(
+            m_currentToolId == AnnotationEngine::Text && isControlVisible("TextOptions"));
+    }
 }
 
 void AnnotationToolbar::selectTool(int toolId)
@@ -93,14 +137,7 @@ void AnnotationToolbar::selectTool(int toolId)
     }
     m_currentToolId = toolId;
 
-    // Show/hide blur widget
-    if (m_blurIntensityWidget) {
-        bool showBlur = (toolId == AnnotationEngine::Blur);
-        m_blurIntensityWidget->setVisible(showBlur);
-    }
-    if (m_textOptionsWidget) {
-        m_textOptionsWidget->setVisible(toolId == AnnotationEngine::Text);
-    }
+    updateDynamicOptionVisibility();
     adjustSize();
     setFixedWidth(sizeHint().width());
     updateGeometry();
@@ -222,6 +259,7 @@ void AnnotationToolbar::setupUI()
 
     // Color button
     m_colorButton = createColorButton(m_currentColor);
+    m_optionalControls["Color"] = m_colorButton;
     m_layout->addWidget(m_colorButton);
 
     // Eyedropper button
@@ -246,6 +284,7 @@ void AnnotationToolbar::setupUI()
         }
     )");
     connect(m_eyedropperButton, &QPushButton::clicked, this, &AnnotationToolbar::onEyedropperClicked);
+    m_optionalControls["Eyedropper"] = m_eyedropperButton;
     m_layout->addWidget(m_eyedropperButton);
 
     // Selection lock button
@@ -275,17 +314,18 @@ void AnnotationToolbar::setupUI()
         }
     )");
     connect(m_lockButton, &QPushButton::clicked, this, &AnnotationToolbar::onLockClicked);
+    m_optionalControls["Lock"] = m_lockButton;
     m_layout->addWidget(m_lockButton);
 
     m_layout->addWidget(createSeparator());
 
     // Pen width slider
-    QSlider *slider = new QSlider(Qt::Horizontal, this);
-    slider->setRange(1, 20);
-    slider->setValue(3);
-    slider->setFixedWidth(80);
-    slider->setToolTip(TranslationManager::toolWidth());
-    slider->setStyleSheet(R"(
+    m_widthSlider = new QSlider(Qt::Horizontal, this);
+    m_widthSlider->setRange(1, 20);
+    m_widthSlider->setValue(3);
+    m_widthSlider->setFixedWidth(80);
+    m_widthSlider->setToolTip(TranslationManager::toolWidth());
+    m_widthSlider->setStyleSheet(R"(
         QSlider::groove:horizontal {
             background: #404040;
             height: 4px;
@@ -302,8 +342,9 @@ void AnnotationToolbar::setupUI()
             background: #1a8cff;
         }
     )");
-    connect(slider, &QSlider::valueChanged, this, &AnnotationToolbar::onWidthSliderChanged);
-    m_layout->addWidget(slider);
+    connect(m_widthSlider, &QSlider::valueChanged, this, &AnnotationToolbar::onWidthSliderChanged);
+    m_optionalControls["Width"] = m_widthSlider;
+    m_layout->addWidget(m_widthSlider);
 
     // Text font controls (hidden by default)
     m_textOptionsWidget = new QWidget(this);
@@ -327,6 +368,7 @@ void AnnotationToolbar::setupUI()
     textLayout->addWidget(m_textFontCombo);
     textLayout->addWidget(m_textSizeSpin);
     m_textOptionsWidget->hide();
+    m_optionalControls["TextOptions"] = m_textOptionsWidget;
     m_layout->addWidget(m_textOptionsWidget);
 
     // Blur strength widget (hidden by default)
@@ -363,6 +405,7 @@ void AnnotationToolbar::setupUI()
     blurLayout->addWidget(m_blurIntensitySlider);
     blurLayout->addWidget(m_blurIntensityLabel);
     m_blurIntensityWidget->hide();
+    m_optionalControls["BlurIntensity"] = m_blurIntensityWidget;
     m_layout->addWidget(m_blurIntensityWidget);
 
     m_layout->addWidget(createSeparator());
@@ -370,6 +413,8 @@ void AnnotationToolbar::setupUI()
     // Undo / Redo
     m_undoButton = createActionButton(":/icons/undo.svg", TranslationManager::toolUndo(), "undo");
     m_redoButton = createActionButton(":/icons/redo.svg", TranslationManager::toolRedo(), "redo");
+    m_optionalControls["Undo"] = m_undoButton;
+    m_optionalControls["Redo"] = m_redoButton;
     m_layout->addWidget(m_undoButton);
     m_layout->addWidget(m_redoButton);
 
@@ -396,6 +441,7 @@ void AnnotationToolbar::setupUI()
     )");
     connect(m_ocrButton, &QPushButton::clicked, this, &AnnotationToolbar::onActionButtonClicked);
     m_actionButtons["ocr"] = m_ocrButton;
+    m_optionalControls["Ocr"] = m_ocrButton;
     m_layout->addWidget(m_ocrButton);
 
     m_uploadButton = new QPushButton(this);
@@ -418,6 +464,7 @@ void AnnotationToolbar::setupUI()
     )");
     connect(m_uploadButton, &QPushButton::clicked, this, &AnnotationToolbar::onActionButtonClicked);
     m_actionButtons["upload"] = m_uploadButton;
+    m_optionalControls["Upload"] = m_uploadButton;
     m_layout->addWidget(m_uploadButton);
 
     m_gifButton = new QPushButton(this);
@@ -440,8 +487,10 @@ void AnnotationToolbar::setupUI()
     )");
     connect(m_gifButton, &QPushButton::clicked, this, &AnnotationToolbar::onActionButtonClicked);
     m_actionButtons["gif"] = m_gifButton;
+    m_optionalControls["Gif"] = m_gifButton;
     m_layout->addWidget(m_gifButton);
 
+    refreshTools();
     adjustSize();
 }
 
@@ -572,14 +621,7 @@ void AnnotationToolbar::onToolButtonClicked()
 
     m_currentToolId = toolId;
 
-    // Show/hide blur widget
-    if (m_blurIntensityWidget) {
-        bool showBlur = (toolId == AnnotationEngine::Blur);
-        m_blurIntensityWidget->setVisible(showBlur);
-    }
-    if (m_textOptionsWidget) {
-        m_textOptionsWidget->setVisible(toolId == AnnotationEngine::Text);
-    }
+    updateDynamicOptionVisibility();
     adjustSize();
     setFixedWidth(sizeHint().width());
     updateGeometry();

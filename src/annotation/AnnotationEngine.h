@@ -50,7 +50,7 @@ public:
     void setBlurIntensity(int intensity);
     int blurIntensity() const { return m_blurIntensity; }
 
-    bool canUndo() const { return !m_annotations.isEmpty(); }
+    bool canUndo() const { return !m_undoStack.isEmpty(); }
     bool canRedo() const { return !m_redoStack.isEmpty(); }
 
     void setShiftHeld(bool held);
@@ -98,8 +98,17 @@ private:
         bool shiftConstrained = false;
     };
 
+    struct HistoryAction {
+        enum Type { Add, Remove } type = Add;
+        Annotation annotation;
+        int index = -1;
+    };
+
     void drawAnnotation(QPainter *painter, const Annotation &ann, const QPoint &offset);
     void drawBlurEffect(QPainter *painter, const QRect &rect, const QPoint &offset);
+    QRect annotationBounds(const Annotation &ann, int padding = 10) const;
+    void pushHistory(HistoryAction::Type type, const Annotation &annotation, int index);
+    void recalculateCounterValue();
 
     Tool m_currentTool;
     QColor m_color;
@@ -110,7 +119,8 @@ private:
     bool m_shiftHeld;
 
     QVector<Annotation> m_annotations;
-    QVector<Annotation> m_redoStack;
+    QVector<HistoryAction> m_undoStack;
+    QVector<HistoryAction> m_redoStack;
     Annotation m_currentAnnotation;
     bool m_isDrawing;
     int m_counterValue;

@@ -100,8 +100,8 @@ void AnnotationEngine::endDraw(const QPoint &pos)
         QPoint diff = m_currentAnnotation.points.first() - m_currentAnnotation.points.last();
         if (m_currentTool == Pen || m_currentTool == Highlighter ||
             qAbs(diff.x()) > 3 || qAbs(diff.y()) > 3) {
-            m_redoStack.clear();
             m_annotations.append(m_currentAnnotation);
+            pushHistory(HistoryAction::Add, m_currentAnnotation, m_annotations.size() - 1);
             emit annotationAdded();
         }
     }
@@ -296,26 +296,45 @@ void AnnotationEngine::drawAnnotation(QPainter *painter, const Annotation &ann, 
 void AnnotationEngine::clear()
 {
     m_annotations.clear();
+    m_undoStack.clear();
     m_redoStack.clear();
     m_counterValue = 0;
 }
 
 void AnnotationEngine::undo()
 {
-    if (!m_annotations.isEmpty()) {
-        Annotation last = m_annotations.takeLast();
-        m_redoStack.append(last);
-        if (last.tool == Counter) m_counterValue = qMax(0, m_counterValue - 1);
+    if (m_undoStack.isEmpty()) return;
+
+    HistoryAction action = m_undoStack.takeLast();
+    if (action.type == HistoryAction::Add) {
+        if (action.index >= 0 && action.index < m_annotations.size())
+            m_annotations.removeAt(action.index);
+        else if (!m_annotations.isEmpty())
+            m_annotations.removeLast();
+    } else {
+        int insertAt = qBound(0, action.index, m_annotations.size());
+        m_annotations.insert(insertAt, action.annotation);
     }
+    m_redoStack.append(action);
+    recalculateCounterValue();
 }
 
 void AnnotationEngine::redo()
 {
-    if (!m_redoStack.isEmpty()) {
-        Annotation last = m_redoStack.takeLast();
-        m_annotations.append(last);
-        if (last.tool == Counter) m_counterValue = last.counterValue;
+    if (m_redoStack.isEmpty()) return;
+
+    HistoryAction action = m_redoStack.takeLast();
+    if (action.type == HistoryAction::Add) {
+        int insertAt = qBound(0, action.index, m_annotations.size());
+        m_annotations.insert(insertAt, action.annotation);
+    } else {
+        if (action.index >= 0 && action.index < m_annotations.size())
+            m_annotations.removeAt(action.index);
+        else if (!m_annotations.isEmpty())
+            m_annotations.removeLast();
     }
+    m_undoStack.append(action);
+    recalculateCounterValue();
 }
 
 void AnnotationEngine::addTextAnnotation(const QPoint &pos, const QString &text)
@@ -326,8 +345,8 @@ void AnnotationEngine::addTextAnnotation(const QPoint &pos, const QString &text)
     a.fontFamily = m_textFontFamily;
     a.fontSize = m_textFontSize;
     a.points.append(pos); a.text = text;
-    m_redoStack.clear();
     m_annotations.append(a);
+    pushHistory(HistoryAction::Add, a, m_annotations.size() - 1);
     emit annotationAdded();
 }
 
@@ -339,8 +358,8 @@ void AnnotationEngine::addCounterAnnotation(const QPoint &pos)
     ann.penWidth = m_penWidth;
     ann.points.append(pos);
     ann.counterValue = ++m_counterValue;
-    m_redoStack.clear();
     m_annotations.append(ann);
+    pushHistory(HistoryAction::Add, ann, m_annotations.size() - 1);
     emit annotationAdded();
 }
 
@@ -350,21 +369,13 @@ bool AnnotationEngine::eraseAnnotationAt(const QPoint &pos)
         const Annotation &ann = m_annotations[i];
         if (ann.points.isEmpty()) continue;
 
-        QRect bounds;
-        if (ann.tool == Text || ann.tool == Counter) {
-            bounds = QRect(ann.points.first(), QSize(80, 30));
-            bounds.moveCenter(ann.points.first());
-        } else if (ann.points.size() == 1) {
-            bounds = QRect(ann.points.first(), QSize(10, 10));
-            bounds.moveCenter(ann.points.first());
-        } else {
-            bounds = QRect(ann.points.first(), ann.points.last()).normalized();
-            bounds.adjust(-5, -5, 5, 5);
-        }
+        QRect bounds = annotationBounds(ann, 8);
 
         if (bounds.contains(pos)) {
-            m_redoStack.append(m_annotations[i]);
+            Annotation removed = m_annotations[i];
             m_annotations.removeAt(i);
+            pushHistory(HistoryAction::Remove, removed, i);
+            recalculateCounterValue();
             return true;
         }
     }
@@ -377,28 +388,7 @@ int AnnotationEngine::findAnnotationAt(const QPoint &pos)
         const Annotation &ann = m_annotations[i];
         if (ann.points.isEmpty()) continue;
 
-        QRect bounds;
-        if (ann.tool == Text || ann.tool == Counter) {
-            bounds = QRect(ann.points.first(), QSize(100, 40));
-            bounds.moveCenter(ann.points.first());
-        } else if (ann.tool == Blur) {
-            bounds = QRect(ann.points.first(), ann.points.last()).normalized();
-            bounds.adjust(-10, -10, 10, 10);
-        } else if (ann.points.size() == 1) {
-            bounds = QRect(ann.points.first(), QSize(20, 20));
-            bounds.moveCenter(ann.points.first());
-        } else {
-            // Compute bounding box covering all points
-            int minX = INT_MAX, minY = INT_MAX, maxX = INT_MIN, maxY = INT_MIN;
-            for (const QPoint &p : ann.points) {
-                minX = qMin(minX, p.x());
-                minY = qMin(minY, p.y());
-                maxX = qMax(maxX, p.x());
-                maxY = qMax(maxY, p.y());
-            }
-            bounds = QRect(minX, minY, maxX - minX, maxY - minY);
-            bounds.adjust(-10, -10, 10, 10);
-        }
+        QRect bounds = annotationBounds(ann, 10);
 
         if (bounds.contains(pos))
             return i;
@@ -423,23 +413,63 @@ void AnnotationEngine::setSelectedIndex(int index)
 QRect AnnotationEngine::boundingRectOf(int index) const
 {
     if (index < 0 || index >= m_annotations.size()) return QRect();
-    const Annotation &ann = m_annotations[index];
+    return annotationBounds(m_annotations[index], 0);
+}
+
+QRect AnnotationEngine::annotationBounds(const Annotation &ann, int padding) const
+{
     if (ann.points.isEmpty()) return QRect();
 
-    if (ann.tool == Text || ann.tool == Counter) {
-        QRect bounds(ann.points.first(), QSize(100, 40));
-        bounds.moveCenter(ann.points.first());
-        return bounds;
-    } else if (ann.tool == Blur || ann.tool == SemiRect) {
-        return QRect(ann.points.first(), ann.points.last()).normalized();
+    QRect bounds;
+    if (ann.tool == Text) {
+        QFont font(ann.fontFamily.isEmpty() ? QStringLiteral("Segoe UI") : ann.fontFamily,
+                   qBound(8, ann.fontSize, 72));
+        font.setBold(true);
+        QTextDocument doc;
+        doc.setDefaultFont(font);
+        doc.setPlainText(ann.text);
+        QSize docSize = doc.size().toSize();
+        bounds = QRect(ann.points.first(), docSize + QSize(8, 8));
+    } else if (ann.tool == Counter) {
+        const int radius = 14;
+        bounds = QRect(ann.points.first() - QPoint(radius, radius), QSize(radius * 2, radius * 2));
+    } else if (ann.tool == Blur || ann.tool == SemiRect || ann.tool == Rectangle || ann.tool == Circle || ann.tool == Line || ann.tool == Arrow) {
+        if (ann.points.size() < 2)
+            bounds = QRect(ann.points.first(), QSize(1, 1));
+        else
+            bounds = QRect(ann.points.first(), ann.points.last()).normalized();
+    } else if (ann.points.size() == 1) {
+        bounds = QRect(ann.points.first(), QSize(1, 1));
     } else {
         int minX = INT_MAX, minY = INT_MAX, maxX = INT_MIN, maxY = INT_MIN;
         for (const QPoint &p : ann.points) {
             minX = qMin(minX, p.x()); minY = qMin(minY, p.y());
             maxX = qMax(maxX, p.x()); maxY = qMax(maxY, p.y());
         }
-        return QRect(minX, minY, maxX - minX, maxY - minY);
+        bounds = QRect(QPoint(minX, minY), QPoint(maxX, maxY)).normalized();
     }
+    bounds.adjust(-padding, -padding, padding, padding);
+    return bounds;
+}
+
+void AnnotationEngine::pushHistory(HistoryAction::Type type, const Annotation &annotation, int index)
+{
+    HistoryAction action;
+    action.type = type;
+    action.annotation = annotation;
+    action.index = index;
+    m_undoStack.append(action);
+    m_redoStack.clear();
+}
+
+void AnnotationEngine::recalculateCounterValue()
+{
+    int maxCounter = 0;
+    for (const Annotation &ann : m_annotations) {
+        if (ann.tool == Counter)
+            maxCounter = qMax(maxCounter, ann.counterValue);
+    }
+    m_counterValue = maxCounter;
 }
 
 void AnnotationEngine::setScreenSnapshot(const QPixmap &snapshot)

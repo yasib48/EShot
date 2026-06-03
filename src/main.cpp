@@ -90,6 +90,7 @@ public slots:
             m_skipNextCaptureNotification = false;
             return;
         }
+        m_lastNotificationPath.clear();
         if (m_trayIcon && m_showNotifications) {
             m_trayIcon->showMessage(
                 TranslationManager::notifCaptureTitle(),
@@ -258,6 +259,7 @@ public slots:
     void onRecordingFailed(QString reason)
     {
         if (m_recordingIndicator) { m_recordingIndicator->stop(); m_recordingIndicator = nullptr; }
+        m_lastNotificationPath.clear();
         if (m_trayIcon) m_trayIcon->showMessage(TranslationManager::notifCaptureTitle(),
                                                 TranslationManager::recordingFailed() + QStringLiteral(": ") + reason,
                                                 QSystemTrayIcon::Warning, 3000);

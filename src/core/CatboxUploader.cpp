@@ -118,10 +118,21 @@ void CatboxUploader::upload()
 void CatboxUploader::cancel()
 {
     if (m_reply) {
-        m_reply->abort();
+        QNetworkReply *reply = m_reply;
+        QHttpMultiPart *multipart = m_multipart;
+        m_reply = nullptr;
+        m_multipart = nullptr;
+        disconnect(reply, nullptr, this, nullptr);
+        reply->abort();
+        reply->deleteLater();
+        if (multipart && multipart->parent() != reply)
+            multipart->deleteLater();
+        return;
     }
-    m_multipart = nullptr;
-    m_reply = nullptr;
+    if (m_multipart) {
+        m_multipart->deleteLater();
+        m_multipart = nullptr;
+    }
 }
 
 ImageUploader *createCatboxUploader(QObject *parent)

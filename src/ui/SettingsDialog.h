@@ -62,6 +62,7 @@ private:
     QLineEdit *m_filenamePatternEdit = nullptr;
     QLabel *m_patternPreviewLabel = nullptr;
     QCheckBox *m_autoStartCheck = nullptr;
+    bool m_loadedAutoStart = false;
     QCheckBox *m_showNotificationsCheck = nullptr;
     QCheckBox *m_playSoundCheck = nullptr;
     QCheckBox *m_copyPathAfterSaveCheck = nullptr;

@@ -24,10 +24,21 @@
 #include <QPointer>
 #include <QRegularExpression>
 #include <QCoreApplication>
+#include <QMessageBox>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
 #endif
+
+namespace {
+QString defaultSaveDirectory()
+{
+    QString picturesPath = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
+    if (picturesPath.trimmed().isEmpty())
+        picturesPath = QDir::homePath();
+    return QDir(picturesPath).filePath(QStringLiteral("EShot"));
+}
+}
 
 CaptureOverlay::CaptureOverlay(QWidget *parent)
     : QWidget(parent, Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::Tool)
@@ -975,6 +986,7 @@ void CaptureOverlay::showToolbar()
 
     m_toolbar->refreshTools();
 
+    QRect toolbarRect;
     if (m_toolbar->hasVisibleTools()) {
         // --- Bottom toolbar: below the selection, centered ---
         m_toolbar->adjustSize();
@@ -1000,6 +1012,7 @@ void CaptureOverlay::showToolbar()
         m_toolbar->move(tx, ty);
         m_toolbar->show();
         m_toolbar->raise();
+        toolbarRect = m_toolbar->geometry();
     } else {
         m_toolbar->hide();
     }
@@ -1038,6 +1051,36 @@ void CaptureOverlay::showToolbar()
             py = 5;
         if (py + ph > height() - 5)
             py = height() - ph - 5;
+
+        if (toolbarRect.isValid()) {
+            auto panelRectAt = [&](int y) {
+                return QRect(px, y, pw, ph).adjusted(-4, -4, 4, 4);
+            };
+            auto inBounds = [&](int y) {
+                if (dockedInside)
+                    return y >= selRect.top() + 2 && y + ph <= selRect.bottom() - 2;
+                return y >= 5 && y + ph <= height() - 5;
+            };
+            auto tryY = [&](int candidate, int &outY) {
+                if (!inBounds(candidate))
+                    return false;
+                if (panelRectAt(candidate).intersects(toolbarRect.adjusted(-4, -4, 4, 4)))
+                    return false;
+                outY = candidate;
+                return true;
+            };
+
+            int adjustedY = py;
+            if (panelRectAt(py).intersects(toolbarRect.adjusted(-4, -4, 4, 4))) {
+                if (!tryY(toolbarRect.top() - ph - margin, adjustedY)
+                    && !tryY(toolbarRect.bottom() + margin, adjustedY)
+                    && !tryY(selRect.top() + 2, adjustedY)
+                    && !tryY(selRect.bottom() - ph - 2, adjustedY)) {
+                    adjustedY = py;
+                }
+                py = adjustedY;
+            }
+        }
 
         m_actionPanel->move(px, py);
         m_actionPanel->show();
@@ -1149,6 +1192,7 @@ void CaptureOverlay::onOcrRequested()
     dlg.setLanguageTag(lang);
     dlg.exec();
     show();
+    if (m_selectionComplete) showToolbar();
 }
 
 void CaptureOverlay::onUploadRequested()
@@ -1160,6 +1204,7 @@ void CaptureOverlay::onUploadRequested()
     dlg.setImage(pix);
     dlg.exec();
     show();
+    if (m_selectionComplete) showToolbar();
 }
 
 void CaptureOverlay::onGifRequested()
@@ -1275,10 +1320,9 @@ void CaptureOverlay::onSave()
     QSettings s("EShot", "EShot");
     QString cliFullPath = s.value("cliSaveFullPath").toString();
     s.remove("cliSaveFullPath");
-    QString path = s.value("savePath",
-        QStandardPaths::writableLocation(QStandardPaths::PicturesLocation)).toString();
+    QString path = s.value("savePath", defaultSaveDirectory()).toString();
     if (path.trimmed().isEmpty())
-        path = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
+        path = defaultSaveDirectory();
     QString format = s.value("imageFormat", "PNG").toString();
     int quality = s.value("imageQuality", 95).toInt();
     QString pattern = s.value("filenamePattern", "Screenshot_%Y-%M-%D_%h-%m-%s").toString();
@@ -1289,9 +1333,17 @@ void CaptureOverlay::onSave()
     QString filename;
     if (!cliFullPath.isEmpty()) {
         filename = cliFullPath;
+        QFileInfo fi(filename);
+        if (!fi.absoluteDir().exists() && !QDir().mkpath(fi.absolutePath())) {
+            QMessageBox::warning(this, TranslationManager::errTitle(), TranslationManager::errSaveDir() + fi.absolutePath());
+            return;
+        }
     } else {
         QDir dir(path);
-        if (!dir.exists()) dir.mkpath(".");
+        if (!dir.exists() && !dir.mkpath(".")) {
+            QMessageBox::warning(this, TranslationManager::errTitle(), TranslationManager::errSaveDir() + path);
+            return;
+        }
 
         QString ext = format.toLower();
         if (ext == "jpeg") ext = "jpg";
@@ -1321,6 +1373,8 @@ void CaptureOverlay::onSave()
         }
     } else {
         qWarning() << "[CaptureOverlay] Save failed:" << filename;
+        QMessageBox::warning(this, TranslationManager::errTitle(), QStringLiteral("Save failed:\n") + QDir::toNativeSeparators(filename));
+        return;
     }
 
     finishCapture();

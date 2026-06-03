@@ -47,6 +47,14 @@ QStringList defaultToolbarControls()
     return {"Color","Eyedropper","Lock","Width","TextOptions","BlurIntensity","Undo","Redo","Ocr","Upload","Gif"};
 }
 
+QString defaultSaveDirectory()
+{
+    QString picturesPath = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
+    if (picturesPath.trimmed().isEmpty())
+        picturesPath = QDir::homePath();
+    return QDir(picturesPath).filePath(QStringLiteral("EShot"));
+}
+
 QString cleanToolLabel(const QString &label)
 {
     int space = label.indexOf(' ');
@@ -733,7 +741,7 @@ QWidget* SettingsDialog::createHotkeyTab()
 
 void SettingsDialog::loadSettings()
 {
-    QString defPath = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
+    QString defPath = defaultSaveDirectory();
 
     m_savePathEdit->setText(m_settings->value("savePath", defPath).toString());
     m_filenamePatternEdit->setText(m_settings->value("filenamePattern", "Screenshot_%Y-%M-%D_%h-%m-%s").toString());
@@ -744,6 +752,7 @@ void SettingsDialog::loadSettings()
 #else
     m_autoStartCheck->setChecked(m_settings->value("autoStart", false).toBool());
 #endif
+    m_loadedAutoStart = m_autoStartCheck->isChecked();
     m_showNotificationsCheck->setChecked(m_settings->value("showNotifications", true).toBool());
     m_playSoundCheck->setChecked(m_settings->value("playSound", false).toBool());
     m_copyPathAfterSaveCheck->setChecked(m_settings->value("copyPathAfterSave", false).toBool());
@@ -905,7 +914,7 @@ void SettingsDialog::onSave()
 {
     QString savePath = m_savePathEdit->text().trimmed();
     if (savePath.isEmpty())
-        savePath = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
+        savePath = defaultSaveDirectory();
     if (!savePath.isEmpty()) {
         QDir dir(savePath);
         if (!dir.exists() && !dir.mkpath(".")) {
@@ -996,12 +1005,13 @@ void SettingsDialog::onSave()
     if (m_recordingLoopCombo)
         m_settings->setValue("recordingLoop", m_recordingLoopCombo->currentData().toInt());
 
-    if (!setAutoStartTask(m_autoStartCheck->isChecked())) {
+    if (m_autoStartCheck->isChecked() != m_loadedAutoStart && !setAutoStartTask(m_autoStartCheck->isChecked())) {
         QMessageBox::warning(this, TranslationManager::errTitle(),
                              QStringLiteral("Windows ile başlat ayarı kaydedilemedi."));
         return;
     }
 
+    m_loadedAutoStart = m_autoStartCheck->isChecked();
     m_settings->sync();
     accept();
 }

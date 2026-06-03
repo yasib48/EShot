@@ -19,6 +19,16 @@
 #include <windows.h>
 #endif
 
+namespace {
+QString defaultSaveDirectory()
+{
+    QString picturesPath = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
+    if (picturesPath.trimmed().isEmpty())
+        picturesPath = QDir::homePath();
+    return QDir(picturesPath).filePath(QStringLiteral("EShot"));
+}
+}
+
 ScreenRecorder::ScreenRecorder(QObject *parent) : QObject(parent) {}
 
 ScreenRecorder::~ScreenRecorder()
@@ -107,6 +117,8 @@ QString ScreenRecorder::makeDefaultOutputPath() const
     const QString configuredDir = s.value("savePath").toString().trimmed();
     if (!configuredDir.isEmpty()) {
         candidates << configuredDir;
+    } else {
+        candidates << defaultSaveDirectory();
     }
     candidates << QStandardPaths::writableLocation(QStandardPaths::PicturesLocation)
                << QStandardPaths::writableLocation(QStandardPaths::MoviesLocation)

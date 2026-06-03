@@ -172,7 +172,7 @@ void AboutDialog::onCheckForUpdates()
     if (recentChecks.size() >= 3) {
         setUpdateStatus(
             TranslationManager::currentLanguage() == TranslationManager::Turkish
-                ? QString::fromUtf8("GÃ¼ncelleme kontrolÃ¼ sÄ±nÄ±rÄ±na ulaÅŸÄ±ldÄ±. BirkaÃ§ dakika sonra tekrar deneyin.")
+                ? QString::fromUtf8("Güncelleme kontrolü sınırına ulaşıldı. Birkaç dakika sonra tekrar deneyin.")
                 : QStringLiteral("Update check limit reached. Try again in a few minutes."),
             QStringLiteral("#ff9800"));
         return;

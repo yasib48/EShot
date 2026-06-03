@@ -239,8 +239,9 @@ void FirstRunWizard::loadDefaults()
     m_hotkeyEdit->setKeySequence(win32ToKeySequence(savedMod, savedVKey));
 
     QString defaultPath = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
-    if (!defaultPath.isEmpty())
-        defaultPath = QDir(defaultPath).filePath("EShot");
+    if (defaultPath.isEmpty())
+        defaultPath = QDir::homePath();
+    defaultPath = QDir(defaultPath).filePath("EShot");
     m_savePathEdit->setText(s.value("savePath", defaultPath).toString());
 
     onHotkeyChanged();
@@ -293,8 +294,12 @@ void FirstRunWizard::onDisableWindowsPrintScreenSnipping()
 void FirstRunWizard::onFinish()
 {
     QString savePath = m_savePathEdit->text().trimmed();
-    if (savePath.isEmpty())
+    if (savePath.isEmpty()) {
         savePath = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
+        if (savePath.isEmpty())
+            savePath = QDir::homePath();
+        savePath = QDir(savePath).filePath("EShot");
+    }
     if (!savePath.isEmpty()) {
         QDir dir(savePath);
         if (!dir.exists() && !dir.mkpath(".")) {

@@ -181,6 +181,7 @@ void UploadDialog::onUploadClicked()
     m_deleteEdit->clear();
     m_copyLinkBtn->setEnabled(false);
     m_openLinkBtn->setEnabled(false);
+    m_uploader->setImage(m_pixmap);
     m_uploader->upload();
 }
 
@@ -204,7 +205,7 @@ void UploadDialog::onSucceeded(const QString &url, const QString &deleteUrl)
 void UploadDialog::onFailed(const QString &reason)
 {
     setBusy(false);
-    m_statusLabel->setText(TranslationManager::uploadFailed() + QStringLiteral(" — ") + reason);
+    m_statusLabel->setText(TranslationManager::uploadFailed() + QStringLiteral(" - ") + reason);
 }
 
 void UploadDialog::onCopyLink()

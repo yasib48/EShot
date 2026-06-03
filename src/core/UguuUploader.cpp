@@ -10,6 +10,29 @@
 #include <QJsonObject>
 #include <QJsonArray>
 
+namespace {
+QString responsePreview(const QByteArray &data)
+{
+    QString text = QString::fromUtf8(data).trimmed();
+    text.replace('\n', ' ');
+    text.replace('\r', ' ');
+    return text.left(180);
+}
+
+QString networkErrorMessage(const QString &errorString, int statusCode, const QByteArray &data)
+{
+    QString message = errorString.trimmed();
+    const QString body = responsePreview(data);
+    if (message.isEmpty())
+        message = QStringLiteral("server rejected the upload");
+    if (statusCode > 0)
+        message += QStringLiteral(" (HTTP %1)").arg(statusCode);
+    if (!body.isEmpty())
+        message += QStringLiteral(": ") + body;
+    return message;
+}
+}
+
 UguuUploader::UguuUploader(QObject *parent) : ImageUploader(parent) {}
 
 UguuUploader::~UguuUploader()
@@ -52,7 +75,8 @@ void UguuUploader::upload()
     filePart.setBodyDevice(file);
     m_multipart->append(filePart);
 
-    QNetworkRequest req(QUrl(QStringLiteral("https://uguu.se/upload")));
+    QNetworkRequest req(QUrl(QStringLiteral("https://uguu.se/upload?output=json")));
+    req.setRawHeader("Accept", "application/json");
     req.setRawHeader("User-Agent", "EShot/2.4");
     req.setTransferTimeout(60000);
 
@@ -75,11 +99,14 @@ void UguuUploader::upload()
         if (mp) mp->deleteLater();
 
         if (err != QNetworkReply::NoError) {
-            finishWithError(QStringLiteral("network error: %1").arg(errStr));
+            finishWithError(QStringLiteral("network error: %1").arg(networkErrorMessage(errStr, code, data)));
             return;
         }
         if (code < 200 || code >= 300) {
-            finishWithError(QStringLiteral("http %1").arg(code));
+            const QString body = responsePreview(data);
+            finishWithError(body.isEmpty()
+                ? QStringLiteral("http %1").arg(code)
+                : QStringLiteral("http %1: %2").arg(code).arg(body));
             return;
         }
 

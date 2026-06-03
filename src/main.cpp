@@ -239,6 +239,10 @@ public slots:
     {
         if (m_screenRecorder) {
             m_recordingIndicator = new RecordingIndicator(m_screenRecorder->captureRect(), nullptr);
+            connect(m_recordingIndicator, &RecordingIndicator::stopRequested, this, [this]() {
+                if (m_screenRecorder && m_screenRecorder->isRecording())
+                    m_screenRecorder->stop();
+            });
         }
         rebuildTrayMenu();
     }

@@ -16,12 +16,21 @@ public:
     void setRemainingSeconds(int seconds);
     void stop();
 
+signals:
+    void stopRequested();
+
 protected:
     void paintEvent(QPaintEvent *event) override;
+    void mousePressEvent(QMouseEvent *event) override;
 
 private:
+    QString badgeText() const;
+    void updateInteractiveRegion();
+
     QRect m_captureRect;
     QRect m_borderRect;
+    QRect m_badgeRect;
+    QRect m_stopRect;
     bool m_badgeAbove = true;
     QTimer *m_blinkTimer;
     bool m_visible = true;

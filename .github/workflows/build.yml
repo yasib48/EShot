@@ -8,9 +8,6 @@ on:
 env:
   APP_VERSION: '3.0.0'
   QT_VERSION: '6.8.2'
-  # x64 Tesseract comes prebuilt from UB-Mannheim. ARM64 has no prebuilt
-  # upstream binary, so it's compiled natively from source via vcpkg below.
-  TESSERACT_URL: 'https://digi.bib.uni-mannheim.de/tesseract/tesseract-ocr-w64-setup-5.3.4.20240503.exe'
 
 jobs:
   build:
@@ -25,13 +22,15 @@ jobs:
             runner: windows-latest
             cmake_arch: x64
             qt_arch: win64_msvc2022_64
+            vcpkg_triplet: x64-windows
             ffmpeg_url: 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip'
 
           # ARM64 build on the native Windows 11 Arm runner (FFmpeg is native Arm)
           - arch: arm64
             runner: windows-11-arm
             cmake_arch: ARM64
-            qt_arch: win64_msvc2022_arm64
+            qt_arch: win64_msvc2022_arm64_cross_compiled
+            vcpkg_triplet: arm64-windows
             ffmpeg_url: 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-winarm64-gpl.zip'
 
     env:
@@ -43,8 +42,10 @@ jobs:
         uses: actions/checkout@v4
 
       # Qt 6 (qtbase covers Core/Gui/Widgets/Network — no extra modules needed).
-      # The arm64 package is the cross-compiled set; its host tools (moc, rcc,
-      # windeployqt) are x64 PE and run on the Arm runner via emulation.
+      # The arm64 arch is Qt's cross-compiled WoA package; --autodesktop pulls in
+      # the companion x64 host Qt that provides the build/deploy tools (moc, rcc,
+      # windeployqt), which run on the Arm runner via emulation. The flag is a
+      # documented no-op for the x64 arch.
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
         with:
@@ -52,6 +53,7 @@ jobs:
           host: windows
           target: desktop
           arch: ${{ matrix.qt_arch }}
+          extra: --autodesktop
           cache: true
 
       # Stage the bundled third-party binaries into the locations CMake's
@@ -64,31 +66,19 @@ jobs:
           New-Item -ItemType Directory -Force third_party/ffmpeg/bin | Out-Null
           Copy-Item (Get-ChildItem -Recurse ffmpeg_extract/*/bin/*.exe) third_party/ffmpeg/bin/ -Force
 
-      # x64: prebuilt UB-Mannheim installer (NSIS). /S = silent, /D = dir (last, unquoted).
-      - name: Stage Tesseract (x64, UB-Mannheim)
-        if: matrix.arch == 'x64'
-        run: |
-          curl -L -o tesseract-setup.exe "$env:TESSERACT_URL"
-          Start-Process -FilePath .\tesseract-setup.exe -ArgumentList '/S','/D=C:\TesseractOCR' -Wait
-          New-Item -ItemType Directory -Force third_party/tesseract | Out-Null
-          Copy-Item C:\TesseractOCR\tesseract.exe third_party/tesseract/ -Force
-          Copy-Item C:\TesseractOCR\*.dll        third_party/tesseract/ -Force
-
-      # arm64: no prebuilt upstream binary exists, so build natively with vcpkg.
+      # Build Tesseract natively from source with vcpkg for both arches.
       # Cache the binary archives so we don't recompile leptonica/tesseract every run.
-      - name: Cache vcpkg archives (arm64)
-        if: matrix.arch == 'arm64'
+      - name: Cache vcpkg archives
         uses: actions/cache@v4
         with:
           path: ~/AppData/Local/vcpkg/archives
-          key: vcpkg-tesseract-arm64-windows-v1
-          restore-keys: vcpkg-tesseract-arm64-windows-
+          key: vcpkg-tesseract-${{ matrix.vcpkg_triplet }}-v1
+          restore-keys: vcpkg-tesseract-${{ matrix.vcpkg_triplet }}-
 
-      - name: Stage Tesseract (arm64, vcpkg native)
-        if: matrix.arch == 'arm64'
+      - name: Stage Tesseract (${{ matrix.arch }}, vcpkg native)
         run: |
-          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install tesseract:arm64-windows
-          $inst = "$env:VCPKG_INSTALLATION_ROOT\installed\arm64-windows"
+          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install tesseract:${{ matrix.vcpkg_triplet }}
+          $inst = "$env:VCPKG_INSTALLATION_ROOT\installed\${{ matrix.vcpkg_triplet }}"
           New-Item -ItemType Directory -Force third_party/tesseract | Out-Null
           # tesseract.exe lives in tools/; its runtime DLLs (leptonica, curl, ...) are in bin/
           Copy-Item "$inst\tools\tesseract\tesseract.exe" third_party/tesseract/ -Force

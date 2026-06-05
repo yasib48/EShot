@@ -82,5 +82,19 @@ gif_test_output.txt
 test_output.gif
 test_ocr.png
 *.gif.tmp
+*.mp4
+*.webm
+*.avi
+*.mov
+*.mkv
+*.zip
+*.7z
+*.rar
+*.msi
+*.tmp.*
+*_test.exe
+EShot_test.exe
+debug_output.txt
+ocr_test_output.txt
 
 ROADMAP.md

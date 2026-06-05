@@ -1111,6 +1111,30 @@ void CaptureOverlay::refreshUI()
     // Refresh toolbar button tooltips
     if (m_toolbar) m_toolbar->refreshToolTips();
 
+    const bool drawerWasVisible = m_toolSettingsDrawer && m_toolSettingsDrawer->isVisible();
+    if (m_toolSettingsAnimation) {
+        m_toolSettingsAnimation->stop();
+        m_toolSettingsAnimation->deleteLater();
+        m_toolSettingsAnimation = nullptr;
+    }
+    if (m_toolSettingsButtonAnimation) {
+        m_toolSettingsButtonAnimation->stop();
+        m_toolSettingsButtonAnimation->deleteLater();
+        m_toolSettingsButtonAnimation = nullptr;
+    }
+    if (m_toolSettingsButton) {
+        m_toolSettingsButton->deleteLater();
+        m_toolSettingsButton = nullptr;
+    }
+    if (m_toolSettingsDrawer) {
+        m_toolSettingsDrawer->deleteLater();
+        m_toolSettingsDrawer = nullptr;
+    }
+    setupToolSettingsDrawer();
+    updateToolSettingsDrawerPosition();
+    if (drawerWasVisible)
+        setToolSettingsDrawerVisible(true);
+
     // Refresh action panel button tooltips
     if (m_actionPanel) {
         QList<QPushButton*> buttons = m_actionPanel->findChildren<QPushButton*>();

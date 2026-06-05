@@ -23,10 +23,16 @@
 #include <QFont>
 #include <QAbstractItemView>
 #include <QIcon>
+#include <QGridLayout>
+#include <QScrollArea>
+#include <QFrame>
 #include <algorithm>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
+#include <mmdeviceapi.h>
+#include <functiondiscoverykeys_devpkey.h>
+#include <propsys.h>
 #endif
 
 namespace {
@@ -44,7 +50,41 @@ QStringList defaultAnnotationTools()
 
 QStringList defaultToolbarControls()
 {
-    return {"Color","Eyedropper","Lock","Width","TextOptions","BlurIntensity","Undo","Redo","Ocr","Upload","Gif"};
+    return {"Color","Eyedropper","Lock","BlurIntensity","Undo","Redo","Ocr","Upload","Gif","Video"};
+}
+
+struct OverlayShortcutDef {
+    QString key;
+    QString label;
+    QString defaultSequence;
+};
+
+QVector<OverlayShortcutDef> overlayShortcutDefaults()
+{
+    return {
+        {"toolPen", TranslationManager::toolPen(), "P"},
+        {"toolArrow", TranslationManager::toolArrow(), "A"},
+        {"toolLine", TranslationManager::toolLine(), "L"},
+        {"toolRectangle", TranslationManager::toolRect(), "R"},
+        {"toolCircle", TranslationManager::toolCircle(), "C"},
+        {"toolText", TranslationManager::toolText(), "T"},
+        {"toolHighlighter", TranslationManager::toolHighlighter(), "H"},
+        {"toolSemiRect", TranslationManager::toolSemiRect(), "D"},
+        {"toolBlur", TranslationManager::toolBlur(), "B"},
+        {"toolCounter", TranslationManager::toolCounter(), "N"},
+        {"toolEraser", TranslationManager::toolEraser(), "X"},
+        {"actionEyedropper", TranslationManager::toolEyedropper(), "I"},
+        {"actionLock", TranslationManager::actionLock(), "K"},
+        {"actionUndo", TranslationManager::toolUndo(), "Ctrl+Z"},
+        {"actionRedo", TranslationManager::toolRedo(), "Ctrl+Shift+Z"},
+        {"actionCopy", TranslationManager::actionCopy(), "Ctrl+C"},
+        {"actionSave", TranslationManager::actionSave(), "Ctrl+S"},
+        {"actionPin", TranslationManager::actionPin(), "Ctrl+P"},
+        {"actionOcr", TranslationManager::actionOcr(), "Ctrl+O"},
+        {"actionUpload", TranslationManager::uploadToService(), "Ctrl+U"},
+        {"actionGif", TranslationManager::recordingStartTitle(), "Ctrl+G"},
+        {"actionVideo", TranslationManager::videoRecordingTitle(), "Ctrl+Shift+V"}
+    };
 }
 
 QString defaultSaveDirectory()
@@ -61,6 +101,62 @@ QString cleanToolLabel(const QString &label)
     if (space > 0 && !label.at(0).isLetterOrNumber())
         return label.mid(space + 1);
     return label;
+}
+
+#ifdef Q_OS_WIN
+void appendDeviceProperty(IPropertyStore *store, const PROPERTYKEY &key, QStringList &devices)
+{
+    PROPVARIANT value;
+    PropVariantInit(&value);
+    if (SUCCEEDED(store->GetValue(key, &value)) && value.vt == VT_LPWSTR && value.pwszVal) {
+        const QString name = QString::fromWCharArray(value.pwszVal).trimmed();
+        if (!name.isEmpty() && !devices.contains(name))
+            devices.append(name);
+    }
+    PropVariantClear(&value);
+}
+#endif
+
+QStringList windowsAudioInputDevices()
+{
+    QStringList devices;
+#ifdef Q_OS_WIN
+    HRESULT initHr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    const bool shouldUninit = SUCCEEDED(initHr);
+    if (FAILED(initHr) && initHr != RPC_E_CHANGED_MODE)
+        return devices;
+
+    IMMDeviceEnumerator *enumerator = nullptr;
+    HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
+                                  __uuidof(IMMDeviceEnumerator),
+                                  reinterpret_cast<void **>(&enumerator));
+    if (SUCCEEDED(hr) && enumerator) {
+        IMMDeviceCollection *collection = nullptr;
+        hr = enumerator->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE, &collection);
+        if (SUCCEEDED(hr) && collection) {
+            UINT count = 0;
+            collection->GetCount(&count);
+            for (UINT i = 0; i < count; ++i) {
+                IMMDevice *device = nullptr;
+                if (FAILED(collection->Item(i, &device)) || !device)
+                    continue;
+                IPropertyStore *store = nullptr;
+                if (SUCCEEDED(device->OpenPropertyStore(STGM_READ, &store)) && store) {
+                    appendDeviceProperty(store, PKEY_DeviceInterface_FriendlyName, devices);
+                    appendDeviceProperty(store, PKEY_Device_FriendlyName, devices);
+                    appendDeviceProperty(store, PKEY_Device_DeviceDesc, devices);
+                    store->Release();
+                }
+                device->Release();
+            }
+            collection->Release();
+        }
+        enumerator->Release();
+    }
+    if (shouldUninit)
+        CoUninitialize();
+#endif
+    return devices;
 }
 }
 
@@ -394,6 +490,8 @@ QWidget* SettingsDialog::createGeneralTab()
     QVBoxLayout *fnLayout = new QVBoxLayout(fnGroup);
     m_filenamePatternEdit = new QLineEdit();
     m_filenamePatternEdit->setPlaceholderText("Screenshot_%Y-%M-%D_%h-%m-%s");
+    m_filenamePatternEdit->setToolTip(uiLabel("Dosya adinda tarih/saat ve pencere basligi degiskenlerini kullanir.",
+                                              "Use date/time and window title variables in saved filenames."));
     connect(m_filenamePatternEdit, &QLineEdit::textChanged, this, &SettingsDialog::onFilenamePatternChanged);
     fnLayout->addWidget(m_filenamePatternEdit);
     m_patternPreviewLabel = new QLabel();
@@ -418,6 +516,32 @@ QWidget* SettingsDialog::createGeneralTab()
     m_copyPathAfterSaveCheck->setToolTip(TranslationManager::tipCopyPath());
     genLayout->addWidget(m_autoStartCheck);
     genLayout->addWidget(m_showNotificationsCheck);
+    m_notificationOptionsWidget = new QWidget(genGroup);
+    m_notificationOptionsWidget->setStyleSheet(R"(
+        QCheckBox { color: #cfcfcf; }
+        QCheckBox:disabled { color: #777777; }
+        QCheckBox::indicator:disabled { border: 1px solid #555555; background: #333333; }
+    )");
+    QVBoxLayout *notifLayout = new QVBoxLayout(m_notificationOptionsWidget);
+    notifLayout->setContentsMargins(22, 0, 0, 0);
+    notifLayout->setSpacing(2);
+    m_notifyCopyCheck = new QCheckBox(TranslationManager::notifyCopy(), m_notificationOptionsWidget);
+    m_notifySaveCheck = new QCheckBox(TranslationManager::notifySave(), m_notificationOptionsWidget);
+    m_notifyGifCheck = new QCheckBox(TranslationManager::notifyGif(), m_notificationOptionsWidget);
+    m_notifyVideoCheck = new QCheckBox(TranslationManager::notifyVideo(), m_notificationOptionsWidget);
+    m_notifyCopyCheck->setToolTip(uiLabel("Gorsel panoya kopyalaninca bildirim gosterir.", "Show a notification when an image is copied."));
+    m_notifySaveCheck->setToolTip(uiLabel("Gorsel dosyaya kaydedilince klasoru acabilen bildirim gosterir.", "Show a folder-opening notification when an image is saved."));
+    m_notifyGifCheck->setToolTip(uiLabel("GIF kaydi bitince klasoru acabilen bildirim gosterir.", "Show a folder-opening notification when a GIF recording finishes."));
+    m_notifyVideoCheck->setToolTip(uiLabel("Video kaydi bitince klasoru acabilen bildirim gosterir.", "Show a folder-opening notification when a video recording finishes."));
+    notifLayout->addWidget(m_notifyCopyCheck);
+    notifLayout->addWidget(m_notifySaveCheck);
+    notifLayout->addWidget(m_notifyGifCheck);
+    notifLayout->addWidget(m_notifyVideoCheck);
+    auto updateNotifChildren = [this](bool enabled) {
+        if (m_notificationOptionsWidget) m_notificationOptionsWidget->setEnabled(enabled);
+    };
+    connect(m_showNotificationsCheck, &QCheckBox::toggled, this, updateNotifChildren);
+    genLayout->addWidget(m_notificationOptionsWidget);
     genLayout->addWidget(m_playSoundCheck);
     genLayout->addWidget(m_copyPathAfterSaveCheck);
     layout->addWidget(genGroup);
@@ -458,6 +582,7 @@ QWidget* SettingsDialog::createCaptureTab()
     m_formatCombo->addItem(TranslationManager::formatPng(), "PNG");
     m_formatCombo->addItem(TranslationManager::formatJpeg(), "JPEG");
     m_formatCombo->addItem(TranslationManager::formatBmp(), "BMP");
+    m_formatCombo->setToolTip(uiLabel("Kaydedilen ekran goruntusunun dosya bicimi.", "File format for saved screenshots."));
     fmtLayout->addRow("Format:", m_formatCombo);
 
     QHBoxLayout *qLayout = new QHBoxLayout();
@@ -466,6 +591,8 @@ QWidget* SettingsDialog::createCaptureTab()
     m_qualitySpin = new QSpinBox();
     m_qualitySpin->setRange(10, 100);
     m_qualitySpin->setSuffix("%");
+    m_qualitySlider->setToolTip(uiLabel("Sadece JPEG icin kalite ayari.", "Quality setting for JPEG only."));
+    m_qualitySpin->setToolTip(m_qualitySlider->toolTip());
     connect(m_qualitySlider, &QSlider::valueChanged, m_qualitySpin, &QSpinBox::setValue);
     connect(m_qualitySpin, QOverload<int>::of(&QSpinBox::valueChanged), m_qualitySlider, &QSlider::setValue);
     qLayout->addWidget(m_qualitySlider);
@@ -487,10 +614,12 @@ QWidget* SettingsDialog::createCaptureTab()
     m_delaySpin->setSingleStep(500);
     m_delaySpin->setSuffix(" ms");
     m_delaySpin->setSpecialValueText(TranslationManager::noDelay());
+    m_delaySpin->setToolTip(uiLabel("Kisayola bastiktan sonra yakalama ekraninin acilmasi icin bekleme suresi.", "Delay before opening the capture overlay after the shortcut is pressed."));
     capLayout->addRow(TranslationManager::delay(), m_delaySpin);
     m_copyAfterCaptureCheck = new QCheckBox(TranslationManager::copyAfterCapture());
     m_copyAfterCaptureCheck->hide();
     m_closeAfterCopyCheck = new QCheckBox(TranslationManager::closeAfterCopy());
+    m_closeAfterCopyCheck->setToolTip(uiLabel("Kopyala komutundan sonra secim ekranini otomatik kapatir.", "Automatically closes the capture overlay after copying."));
     capLayout->addRow(m_closeAfterCopyCheck);
     layout->addWidget(capGroup);
 
@@ -506,6 +635,7 @@ QWidget* SettingsDialog::createAppearanceTab()
     QGroupBox *themeGroup = new QGroupBox(TranslationManager::theme());
     QVBoxLayout *themeLayout = new QVBoxLayout(themeGroup);
     m_darkModeCheck = new QCheckBox(TranslationManager::darkMode());
+    m_darkModeCheck->setToolTip(uiLabel("Ayarlar penceresi ve yardimci pencereler icin koyu tema.", "Dark theme for settings and helper windows."));
     connect(m_darkModeCheck, &QCheckBox::toggled, this, &SettingsDialog::onThemeChanged);
     themeLayout->addWidget(m_darkModeCheck);
     layout->addWidget(themeGroup);
@@ -516,6 +646,7 @@ QWidget* SettingsDialog::createAppearanceTab()
     m_opacitySlider = new QSlider(Qt::Horizontal);
     m_opacitySlider->setRange(0, 255);
     m_opacitySlider->setTickInterval(25);
+    m_opacitySlider->setToolTip(uiLabel("Secilmeyen ekran alaninin karartma miktari.", "Dim amount for the non-selected screen area."));
     m_opacityValueLabel = new QLabel("0%");
     m_opacityValueLabel->setFixedWidth(40);
     connect(m_opacitySlider, &QSlider::valueChanged, [this](int val) {
@@ -529,6 +660,7 @@ QWidget* SettingsDialog::createAppearanceTab()
     m_crosshairStyleCombo->addItem(TranslationManager::crossDash(), "dash");
     m_crosshairStyleCombo->addItem(TranslationManager::crossSolid(), "solid");
     m_crosshairStyleCombo->addItem(TranslationManager::crossNone(), "none");
+    m_crosshairStyleCombo->setToolTip(uiLabel("Alan secmeden once imlec kilavuz cizgisi stili.", "Cursor guide line style before selecting an area."));
     overlayLayout->addRow(TranslationManager::crosshair(), m_crosshairStyleCombo);
     layout->addWidget(overlayGroup);
 
@@ -541,13 +673,14 @@ QWidget* SettingsDialog::createRecordingTab()
     QWidget *tab = new QWidget();
     QVBoxLayout *layout = new QVBoxLayout(tab);
 
-    QGroupBox *recGroup = new QGroupBox(TranslationManager::recordingSettings());
+    QGroupBox *recGroup = new QGroupBox(TranslationManager::gifSettings());
     QFormLayout *recForm = new QFormLayout(recGroup);
 
     m_recordingFpsSpin = new QSpinBox();
     m_recordingFpsSpin->setRange(1, 30);
     m_recordingFpsSpin->setSuffix(QStringLiteral(" fps"));
     m_recordingFpsSpin->setValue(10);
+    m_recordingFpsSpin->setToolTip(uiLabel("GIF icin saniyedeki kare sayisi. Daha yuksek deger daha akici ama daha buyuk dosya uretir.", "Frames per second for GIF. Higher values are smoother but create larger files."));
     recForm->addRow(TranslationManager::recordingFps(), m_recordingFpsSpin);
 
     m_recordingMaxSecSpin = new QSpinBox();
@@ -555,6 +688,7 @@ QWidget* SettingsDialog::createRecordingTab()
     m_recordingMaxSecSpin->setSuffix(QStringLiteral(" s"));
     m_recordingMaxSecSpin->setSpecialValueText(TranslationManager::recordingUnlimited());
     m_recordingMaxSecSpin->setValue(30);
+    m_recordingMaxSecSpin->setToolTip(uiLabel("GIF kaydinin otomatik duracagi sure. 0 sinirsizdir.", "Time limit for GIF recording. 0 means unlimited."));
     recForm->addRow(TranslationManager::recordingMaxTime(), m_recordingMaxSecSpin);
 
     m_recordingLoopCombo = new QComboBox();
@@ -564,9 +698,101 @@ QWidget* SettingsDialog::createRecordingTab()
     m_recordingLoopCombo->addItem(QStringLiteral("3"), 3);
     m_recordingLoopCombo->addItem(QStringLiteral("5"), 5);
     m_recordingLoopCombo->addItem(QStringLiteral("10"), 10);
+    m_recordingLoopCombo->setToolTip(uiLabel("GIF dosyasinin kac kez donguye girecegi.", "How many times the GIF should loop."));
     recForm->addRow(TranslationManager::recordingLoop(), m_recordingLoopCombo);
 
     layout->addWidget(recGroup);
+
+    QGroupBox *videoGroup = new QGroupBox(TranslationManager::videoRecordingTitle());
+    QFormLayout *videoForm = new QFormLayout(videoGroup);
+
+    m_videoFpsSpin = new QSpinBox();
+    m_videoFpsSpin->setRange(1, 60);
+    m_videoFpsSpin->setSuffix(QStringLiteral(" fps"));
+    m_videoFpsSpin->setValue(30);
+    m_videoFpsSpin->setToolTip(uiLabel("Video icin saniyedeki kare sayisi.", "Frames per second for video recording."));
+    videoForm->addRow(TranslationManager::recordingFps(), m_videoFpsSpin);
+
+    m_videoMaxSecSpin = new QSpinBox();
+    m_videoMaxSecSpin->setRange(0, 3600);
+    m_videoMaxSecSpin->setSuffix(QStringLiteral(" s"));
+    m_videoMaxSecSpin->setSpecialValueText(TranslationManager::recordingUnlimited());
+    m_videoMaxSecSpin->setValue(0);
+    m_videoMaxSecSpin->setToolTip(uiLabel("Video kaydinin otomatik duracagi sure. 0 sinirsizdir.", "Time limit for video recording. 0 means unlimited."));
+    videoForm->addRow(TranslationManager::recordingMaxTime(), m_videoMaxSecSpin);
+
+    m_videoCrfSpin = new QSpinBox();
+    m_videoCrfSpin->setRange(18, 32);
+    m_videoCrfSpin->setValue(24);
+    m_videoCrfSpin->setToolTip(TranslationManager::videoCrfHint());
+    videoForm->addRow(TranslationManager::videoQualityCrf(), m_videoCrfSpin);
+
+    m_videoDesktopAudioCheck = new QCheckBox(TranslationManager::audioDesktop());
+    m_videoDesktopAudioCheck->setToolTip(uiLabel("Video kaydina sistem/masaustu sesini ekler.", "Include system/desktop audio in video recordings."));
+    videoForm->addRow(TranslationManager::audioMode(), m_videoDesktopAudioCheck);
+
+    QWidget *desktopVolumeRow = new QWidget(videoGroup);
+    QHBoxLayout *desktopVolumeLayout = new QHBoxLayout(desktopVolumeRow);
+    desktopVolumeLayout->setContentsMargins(0, 0, 0, 0);
+    desktopVolumeLayout->setSpacing(8);
+    m_videoDesktopVolumeSlider = new QSlider(Qt::Horizontal, desktopVolumeRow);
+    m_videoDesktopVolumeSlider->setRange(0, 100);
+    m_videoDesktopVolumeSlider->setValue(80);
+    m_videoDesktopVolumeSpin = new QSpinBox(desktopVolumeRow);
+    m_videoDesktopVolumeSpin->setRange(0, 100);
+    m_videoDesktopVolumeSpin->setSuffix(QStringLiteral("%"));
+    m_videoDesktopVolumeSpin->setFixedWidth(72);
+    m_videoDesktopVolumeSlider->setToolTip(uiLabel("Kaydedilen masaustu sesi seviyesi.", "Recorded desktop audio volume."));
+    m_videoDesktopVolumeSpin->setToolTip(m_videoDesktopVolumeSlider->toolTip());
+    connect(m_videoDesktopVolumeSlider, &QSlider::valueChanged, m_videoDesktopVolumeSpin, &QSpinBox::setValue);
+    connect(m_videoDesktopVolumeSpin, qOverload<int>(&QSpinBox::valueChanged), m_videoDesktopVolumeSlider, &QSlider::setValue);
+    desktopVolumeLayout->addWidget(m_videoDesktopVolumeSlider);
+    desktopVolumeLayout->addWidget(m_videoDesktopVolumeSpin);
+    videoForm->addRow(uiLabel("Masaustu ses duzeyi", "Desktop volume"), desktopVolumeRow);
+
+    m_videoMicrophoneCheck = new QCheckBox(TranslationManager::audioMicrophone());
+    m_videoMicrophoneCheck->setToolTip(uiLabel("Video kaydina mikrofon sesini ekler.", "Include microphone audio in video recordings."));
+    videoForm->addRow(QString(), m_videoMicrophoneCheck);
+
+    m_videoMicrophoneDeviceCombo = new QComboBox(videoGroup);
+    m_videoMicrophoneDeviceCombo->addItem(QStringLiteral("Default"), QStringLiteral("default"));
+    for (const QString &device : windowsAudioInputDevices())
+        m_videoMicrophoneDeviceCombo->addItem(device, device);
+    m_videoMicrophoneDeviceCombo->setToolTip(uiLabel("Video kaydinda kullanilacak mikrofon kaynagi.", "Microphone source used for video recording."));
+    videoForm->addRow(TranslationManager::audioMicrophoneDevice(), m_videoMicrophoneDeviceCombo);
+
+    QWidget *micVolumeRow = new QWidget(videoGroup);
+    QHBoxLayout *micVolumeLayout = new QHBoxLayout(micVolumeRow);
+    micVolumeLayout->setContentsMargins(0, 0, 0, 0);
+    micVolumeLayout->setSpacing(8);
+    m_videoMicrophoneVolumeSlider = new QSlider(Qt::Horizontal, micVolumeRow);
+    m_videoMicrophoneVolumeSlider->setRange(0, 100);
+    m_videoMicrophoneVolumeSlider->setValue(80);
+    m_videoMicrophoneVolumeSpin = new QSpinBox(micVolumeRow);
+    m_videoMicrophoneVolumeSpin->setRange(0, 100);
+    m_videoMicrophoneVolumeSpin->setSuffix(QStringLiteral("%"));
+    m_videoMicrophoneVolumeSpin->setFixedWidth(72);
+    m_videoMicrophoneVolumeSlider->setToolTip(uiLabel("Kaydedilen mikrofon sesi seviyesi.", "Recorded microphone volume."));
+    m_videoMicrophoneVolumeSpin->setToolTip(m_videoMicrophoneVolumeSlider->toolTip());
+    connect(m_videoMicrophoneVolumeSlider, &QSlider::valueChanged, m_videoMicrophoneVolumeSpin, &QSpinBox::setValue);
+    connect(m_videoMicrophoneVolumeSpin, qOverload<int>(&QSpinBox::valueChanged), m_videoMicrophoneVolumeSlider, &QSlider::setValue);
+    micVolumeLayout->addWidget(m_videoMicrophoneVolumeSlider);
+    micVolumeLayout->addWidget(m_videoMicrophoneVolumeSpin);
+    videoForm->addRow(uiLabel("Mikrofon ses duzeyi", "Microphone volume"), micVolumeRow);
+
+    auto updateDesktopAudioState = [this](bool enabled) {
+        if (m_videoDesktopVolumeSlider) m_videoDesktopVolumeSlider->setEnabled(enabled);
+        if (m_videoDesktopVolumeSpin) m_videoDesktopVolumeSpin->setEnabled(enabled);
+    };
+    auto updateMicrophoneState = [this](bool enabled) {
+        if (m_videoMicrophoneDeviceCombo) m_videoMicrophoneDeviceCombo->setEnabled(enabled);
+        if (m_videoMicrophoneVolumeSlider) m_videoMicrophoneVolumeSlider->setEnabled(enabled);
+        if (m_videoMicrophoneVolumeSpin) m_videoMicrophoneVolumeSpin->setEnabled(enabled);
+    };
+    connect(m_videoDesktopAudioCheck, &QCheckBox::toggled, this, updateDesktopAudioState);
+    connect(m_videoMicrophoneCheck, &QCheckBox::toggled, this, updateMicrophoneState);
+
+    layout->addWidget(videoGroup);
 
     layout->addStretch();
     return tab;
@@ -649,14 +875,13 @@ QWidget* SettingsDialog::createInterfaceTab()
         {"Color",         TranslationManager::toolColor(),                    ":/icons/color.svg"},
         {"Eyedropper",    TranslationManager::toolEyedropper(),               ":/icons/eyedropper.svg"},
         {"Lock",          TranslationManager::actionLock(),                   ":/icons/lock_open.svg"},
-        {"Width",         TranslationManager::toolWidth(),                    ":/icons/pen.svg"},
-        {"TextOptions",   uiLabel("Metin font kontrolleri", "Text font controls"), ":/icons/text.svg"},
         {"BlurIntensity", TranslationManager::toolBlurIntensity(),            ":/icons/blur.svg"},
         {"Undo",          TranslationManager::toolUndo(),                     ":/icons/undo.svg"},
         {"Redo",          TranslationManager::toolRedo(),                     ":/icons/redo.svg"},
         {"Ocr",           TranslationManager::actionOcr(),                    ":/icons/ocr.svg"},
         {"Upload",        TranslationManager::uploadToService(),              ":/icons/upload.svg"},
-        {"Gif",           TranslationManager::recordingStartTitle(),          ":/icons/record.svg"},
+        {"Gif",           TranslationManager::recordingStartTitle(),          ":/icons/gif.svg"},
+        {"Video",         TranslationManager::videoRecordingTitle(),          ":/icons/video.svg"},
     };
 
     QWidget *columns = new QWidget(toolsGroup);
@@ -713,7 +938,13 @@ QWidget* SettingsDialog::createInterfaceTab()
 QWidget* SettingsDialog::createHotkeyTab()
 {
     QWidget *tab = new QWidget();
-    QVBoxLayout *layout = new QVBoxLayout(tab);
+    QVBoxLayout *outerLayout = new QVBoxLayout(tab);
+    outerLayout->setContentsMargins(0, 0, 0, 0);
+    QScrollArea *scroll = new QScrollArea(tab);
+    scroll->setWidgetResizable(true);
+    scroll->setFrameShape(QFrame::NoFrame);
+    QWidget *content = new QWidget(scroll);
+    QVBoxLayout *layout = new QVBoxLayout(content);
     layout->setSpacing(12);
 
     QGroupBox *group = new QGroupBox(TranslationManager::hotkeyTitle());
@@ -766,6 +997,53 @@ QWidget* SettingsDialog::createHotkeyTab()
     });
     gl->addWidget(resetHkBtn);
 
+    QGroupBox *recordingGroup = new QGroupBox(TranslationManager::videoRecordingTitle());
+    QFormLayout *recordingHotkeyLayout = new QFormLayout(recordingGroup);
+    auto makeRecordingHotkeyEdit = []() {
+        auto *edit = new QKeySequenceEdit();
+        edit->setMinimumHeight(32);
+        edit->setStyleSheet(R"(
+            QKeySequenceEdit {
+                padding: 5px 10px;
+                border: 1px solid #555;
+                border-radius: 5px;
+                background: #2a2a2a;
+                color: #ffffff;
+            }
+            QKeySequenceEdit:focus { border-color: #1a8cff; }
+        )");
+        return edit;
+    };
+    m_recordingPauseHotkeyEdit = makeRecordingHotkeyEdit();
+    m_recordingStopHotkeyEdit = makeRecordingHotkeyEdit();
+    m_recordingCancelHotkeyEdit = makeRecordingHotkeyEdit();
+    recordingHotkeyLayout->addRow(TranslationManager::recordingPauseResume(), m_recordingPauseHotkeyEdit);
+    recordingHotkeyLayout->addRow(TranslationManager::recordingStop(), m_recordingStopHotkeyEdit);
+    recordingHotkeyLayout->addRow(TranslationManager::recordingCancel(), m_recordingCancelHotkeyEdit);
+    gl->addWidget(recordingGroup);
+
+    QGroupBox *overlayGroup = new QGroupBox(uiLabel("SS ekrani kisayollari", "Screenshot screen shortcuts"));
+    QGridLayout *overlayLayout = new QGridLayout(overlayGroup);
+    overlayLayout->setContentsMargins(10, 10, 10, 10);
+    overlayLayout->setHorizontalSpacing(10);
+    overlayLayout->setVerticalSpacing(6);
+    m_overlayHotkeyEdits.clear();
+    const auto overlayDefs = overlayShortcutDefaults();
+    for (int i = 0; i < overlayDefs.size(); ++i) {
+        const int row = i / 2;
+        const int col = (i % 2) * 2;
+        QLabel *label = new QLabel(overlayDefs[i].label, overlayGroup);
+        label->setStyleSheet(QStringLiteral("color: #d0d0d0; font-size: 12px;"));
+        auto *edit = makeRecordingHotkeyEdit();
+        edit->setMinimumHeight(28);
+        edit->setToolTip(uiLabel("Bu kisayol sadece ekran goruntusu secim/duzenleme ekraninda calisir.",
+                                 "This shortcut works only on the screenshot selection/annotation screen."));
+        m_overlayHotkeyEdits.insert(overlayDefs[i].key, edit);
+        overlayLayout->addWidget(label, row, col);
+        overlayLayout->addWidget(edit, row, col + 1);
+    }
+    gl->addWidget(overlayGroup);
+
     QLabel *noteLabel = new QLabel(TranslationManager::hotkeyNote());
     noteLabel->setWordWrap(true);
     noteLabel->setStyleSheet("color: #888; font-size: 11px;");
@@ -773,6 +1051,8 @@ QWidget* SettingsDialog::createHotkeyTab()
 
     layout->addWidget(group);
     layout->addStretch();
+    scroll->setWidget(content);
+    outerLayout->addWidget(scroll);
     return tab;
 }
 
@@ -791,6 +1071,11 @@ void SettingsDialog::loadSettings()
 #endif
     m_loadedAutoStart = m_autoStartCheck->isChecked();
     m_showNotificationsCheck->setChecked(m_settings->value("showNotifications", true).toBool());
+    if (m_notifyCopyCheck) m_notifyCopyCheck->setChecked(m_settings->value("notifyCopy", false).toBool());
+    if (m_notifySaveCheck) m_notifySaveCheck->setChecked(m_settings->value("notifySave", true).toBool());
+    if (m_notifyGifCheck) m_notifyGifCheck->setChecked(m_settings->value("notifyGif", true).toBool());
+    if (m_notifyVideoCheck) m_notifyVideoCheck->setChecked(m_settings->value("notifyVideo", true).toBool());
+    if (m_notificationOptionsWidget) m_notificationOptionsWidget->setEnabled(m_showNotificationsCheck->isChecked());
     m_playSoundCheck->setChecked(m_settings->value("playSound", false).toBool());
     m_copyPathAfterSaveCheck->setChecked(m_settings->value("copyPathAfterSave", false).toBool());
 
@@ -822,6 +1107,42 @@ void SettingsDialog::loadSettings()
         if (idx < 0) idx = 0;
         m_recordingLoopCombo->setCurrentIndex(idx);
     }
+    if (m_videoFpsSpin)
+        m_videoFpsSpin->setValue(m_settings->value("videoRecordingFps", 30).toInt());
+    if (m_videoMaxSecSpin)
+        m_videoMaxSecSpin->setValue(m_settings->value("videoRecordingMaxSeconds", 0).toInt());
+    if (m_videoCrfSpin)
+        m_videoCrfSpin->setValue(m_settings->value("videoRecordingCrf", 24).toInt());
+    const bool videoDesktopAudio = m_settings->contains("videoDesktopAudioEnabled")
+        ? m_settings->value("videoDesktopAudioEnabled", false).toBool()
+        : (m_settings->value("videoAudioMode", "none").toString() == QStringLiteral("desktop") ||
+           m_settings->value("videoAudioMode", "none").toString() == QStringLiteral("both"));
+    const bool videoMicrophoneAudio = m_settings->contains("videoMicrophoneEnabled")
+        ? m_settings->value("videoMicrophoneEnabled", false).toBool()
+        : (m_settings->value("videoAudioMode", "none").toString() == QStringLiteral("microphone") ||
+           m_settings->value("videoAudioMode", "none").toString() == QStringLiteral("both"));
+    if (m_videoDesktopAudioCheck)
+        m_videoDesktopAudioCheck->setChecked(videoDesktopAudio);
+    if (m_videoDesktopVolumeSlider)
+        m_videoDesktopVolumeSlider->setValue(m_settings->value("videoDesktopAudioVolume", 80).toInt());
+    if (m_videoDesktopVolumeSpin)
+        m_videoDesktopVolumeSpin->setValue(m_settings->value("videoDesktopAudioVolume", 80).toInt());
+    if (m_videoMicrophoneCheck)
+        m_videoMicrophoneCheck->setChecked(videoMicrophoneAudio);
+    if (m_videoMicrophoneVolumeSlider)
+        m_videoMicrophoneVolumeSlider->setValue(m_settings->value("videoMicrophoneVolume", 80).toInt());
+    if (m_videoMicrophoneVolumeSpin)
+        m_videoMicrophoneVolumeSpin->setValue(m_settings->value("videoMicrophoneVolume", 80).toInt());
+    if (m_videoMicrophoneDeviceCombo) {
+        int idx = m_videoMicrophoneDeviceCombo->findData(m_settings->value("videoMicrophoneDevice", "default").toString());
+        if (idx < 0) idx = 0;
+        m_videoMicrophoneDeviceCombo->setCurrentIndex(idx);
+        m_videoMicrophoneDeviceCombo->setEnabled(videoMicrophoneAudio);
+    }
+    if (m_videoDesktopVolumeSlider) m_videoDesktopVolumeSlider->setEnabled(videoDesktopAudio);
+    if (m_videoDesktopVolumeSpin) m_videoDesktopVolumeSpin->setEnabled(videoDesktopAudio);
+    if (m_videoMicrophoneVolumeSlider) m_videoMicrophoneVolumeSlider->setEnabled(videoMicrophoneAudio);
+    if (m_videoMicrophoneVolumeSpin) m_videoMicrophoneVolumeSpin->setEnabled(videoMicrophoneAudio);
 
     bool jpeg = (fmt == "JPEG");
     m_qualitySlider->setEnabled(jpeg);
@@ -838,6 +1159,13 @@ void SettingsDialog::loadSettings()
 
     QStringList visibleTools = m_settings->value("visibleTools", defaultAnnotationTools()).toStringList();
     QStringList visibleToolbarControls = m_settings->value("visibleToolbarControls", defaultToolbarControls()).toStringList();
+    if (m_settings->contains("visibleToolbarControls") &&
+        !m_settings->value("toolbarControlsMigratedVideo", false).toBool()) {
+        if (!visibleToolbarControls.contains(QStringLiteral("Video")))
+            visibleToolbarControls.append(QStringLiteral("Video"));
+        m_settings->setValue("toolbarControlsMigratedVideo", true);
+        m_settings->setValue("visibleToolbarControls", visibleToolbarControls);
+    }
     auto applyVisibility = [](QListWidget *list, const QStringList &visible) {
         if (!list) return;
         for (int i = 0; i < list->count(); ++i) {
@@ -853,6 +1181,24 @@ void SettingsDialog::loadSettings()
     UINT savedMod  = static_cast<UINT>(m_settings->value("hotkeyModifiers", 0).toUInt());
     UINT savedVKey = static_cast<UINT>(m_settings->value("hotkeyVKey", VK_SNAPSHOT).toUInt());
     m_hotkeyEdit->setKeySequence(win32ToKeySequence(savedMod, savedVKey));
+    if (m_recordingPauseHotkeyEdit)
+        m_recordingPauseHotkeyEdit->setKeySequence(win32ToKeySequence(
+            static_cast<UINT>(m_settings->value("recordingPauseHotkeyModifiers", MOD_CONTROL | MOD_ALT).toUInt()),
+            static_cast<UINT>(m_settings->value("recordingPauseHotkeyVKey", 'P').toUInt())));
+    if (m_recordingStopHotkeyEdit)
+        m_recordingStopHotkeyEdit->setKeySequence(win32ToKeySequence(
+            static_cast<UINT>(m_settings->value("recordingStopHotkeyModifiers", MOD_CONTROL | MOD_ALT).toUInt()),
+            static_cast<UINT>(m_settings->value("recordingStopHotkeyVKey", 'S').toUInt())));
+    if (m_recordingCancelHotkeyEdit)
+        m_recordingCancelHotkeyEdit->setKeySequence(win32ToKeySequence(
+            static_cast<UINT>(m_settings->value("recordingCancelHotkeyModifiers", MOD_CONTROL | MOD_ALT).toUInt()),
+            static_cast<UINT>(m_settings->value("recordingCancelHotkeyVKey", 'X').toUInt())));
+    for (const auto &def : overlayShortcutDefaults()) {
+        if (QKeySequenceEdit *edit = m_overlayHotkeyEdits.value(def.key, nullptr)) {
+            edit->setKeySequence(QKeySequence(m_settings->value(QStringLiteral("overlayShortcut/%1").arg(def.key),
+                                                                def.defaultSequence).toString()));
+        }
+    }
     m_hotkeyStatusLabel->setText(TranslationManager::hotkeyValid());
     m_hotkeyStatusLabel->setStyleSheet("color: #4caf50; font-size: 12px;");
     updatePrintScreenConflictUi();
@@ -983,6 +1329,23 @@ void SettingsDialog::onSave()
         return;
     }
 
+    UINT pauseMod = 0, pauseVKey = 0;
+    UINT stopMod = 0, stopVKey = 0;
+    UINT cancelMod = 0, cancelVKey = 0;
+    if (!m_recordingPauseHotkeyEdit || !keySequenceToWin32(m_recordingPauseHotkeyEdit->keySequence(), pauseMod, pauseVKey) ||
+        !m_recordingStopHotkeyEdit || !keySequenceToWin32(m_recordingStopHotkeyEdit->keySequence(), stopMod, stopVKey) ||
+        !m_recordingCancelHotkeyEdit || !keySequenceToWin32(m_recordingCancelHotkeyEdit->keySequence(), cancelMod, cancelVKey)) {
+        QMessageBox::warning(this, TranslationManager::errInvalidHotkeyTitle(), TranslationManager::errInvalidHotkey());
+        return;
+    }
+    if (!HotkeyManager::instance().reRegisterRecordingHotkeys(pauseMod, pauseVKey, stopMod, stopVKey, cancelMod, cancelVKey)) {
+        QMessageBox::warning(
+            this,
+            TranslationManager::errInvalidHotkeyTitle(),
+            TranslationManager::errInvalidHotkey() + QStringLiteral("\n\nBu kayÄ±t kÄ±sayollarÄ±ndan biri baÅŸka bir uygulama tarafÄ±ndan kullanÄ±lÄ±yor olabilir."));
+        return;
+    }
+
     // Save language
     QString newLang = m_langCombo->currentData().toString();
     TranslationManager::Language lang = TranslationManager::English;
@@ -1000,6 +1363,10 @@ void SettingsDialog::onSave()
     m_settings->setValue("filenamePattern",    m_filenamePatternEdit->text());
     m_settings->setValue("autoStart",          m_autoStartCheck->isChecked());
     m_settings->setValue("showNotifications",  m_showNotificationsCheck->isChecked());
+    if (m_notifyCopyCheck) m_settings->setValue("notifyCopy", m_notifyCopyCheck->isChecked());
+    if (m_notifySaveCheck) m_settings->setValue("notifySave", m_notifySaveCheck->isChecked());
+    if (m_notifyGifCheck) m_settings->setValue("notifyGif", m_notifyGifCheck->isChecked());
+    if (m_notifyVideoCheck) m_settings->setValue("notifyVideo", m_notifyVideoCheck->isChecked());
     m_settings->setValue("playSound",          m_playSoundCheck->isChecked());
     m_settings->setValue("copyPathAfterSave",  m_copyPathAfterSaveCheck->isChecked());
 
@@ -1034,6 +1401,17 @@ void SettingsDialog::onSave()
 
     m_settings->setValue("hotkeyModifiers", newMod);
     m_settings->setValue("hotkeyVKey",      newVKey);
+    m_settings->setValue("recordingPauseHotkeyModifiers", pauseMod);
+    m_settings->setValue("recordingPauseHotkeyVKey",      pauseVKey);
+    m_settings->setValue("recordingStopHotkeyModifiers",  stopMod);
+    m_settings->setValue("recordingStopHotkeyVKey",       stopVKey);
+    m_settings->setValue("recordingCancelHotkeyModifiers", cancelMod);
+    m_settings->setValue("recordingCancelHotkeyVKey",      cancelVKey);
+    for (auto it = m_overlayHotkeyEdits.constBegin(); it != m_overlayHotkeyEdits.constEnd(); ++it) {
+        if (it.value())
+            m_settings->setValue(QStringLiteral("overlayShortcut/%1").arg(it.key()),
+                                 it.value()->keySequence().toString(QKeySequence::PortableText));
+    }
 
     if (m_recordingFpsSpin)
         m_settings->setValue("recordingFps", m_recordingFpsSpin->value());
@@ -1041,6 +1419,24 @@ void SettingsDialog::onSave()
         m_settings->setValue("recordingMaxSeconds", m_recordingMaxSecSpin->value());
     if (m_recordingLoopCombo)
         m_settings->setValue("recordingLoop", m_recordingLoopCombo->currentData().toInt());
+    if (m_videoFpsSpin)
+        m_settings->setValue("videoRecordingFps", m_videoFpsSpin->value());
+    if (m_videoMaxSecSpin)
+        m_settings->setValue("videoRecordingMaxSeconds", m_videoMaxSecSpin->value());
+    if (m_videoCrfSpin)
+        m_settings->setValue("videoRecordingCrf", m_videoCrfSpin->value());
+    const bool desktopAudio = m_videoDesktopAudioCheck && m_videoDesktopAudioCheck->isChecked();
+    const bool microphoneAudio = m_videoMicrophoneCheck && m_videoMicrophoneCheck->isChecked();
+    m_settings->setValue("videoDesktopAudioEnabled", desktopAudio);
+    m_settings->setValue("videoMicrophoneEnabled", microphoneAudio);
+    m_settings->setValue("videoDesktopAudioVolume", m_videoDesktopVolumeSpin ? m_videoDesktopVolumeSpin->value() : 80);
+    m_settings->setValue("videoMicrophoneVolume", m_videoMicrophoneVolumeSpin ? m_videoMicrophoneVolumeSpin->value() : 80);
+    m_settings->setValue("videoMicrophoneDevice",
+                         m_videoMicrophoneDeviceCombo ? m_videoMicrophoneDeviceCombo->currentData().toString() : QStringLiteral("default"));
+    m_settings->setValue("videoAudioMode", desktopAudio && microphoneAudio ? QStringLiteral("both")
+        : desktopAudio ? QStringLiteral("desktop")
+        : microphoneAudio ? QStringLiteral("microphone")
+        : QStringLiteral("none"));
 
     if (m_autoStartCheck->isChecked() != m_loadedAutoStart && !setAutoStartTask(m_autoStartCheck->isChecked())) {
         QMessageBox::warning(this, TranslationManager::errTitle(),
@@ -1078,6 +1474,10 @@ void SettingsDialog::onExportSettings()
     obj["filenamePattern"] = m_filenamePatternEdit->text();
     obj["autoStart"] = m_autoStartCheck->isChecked();
     obj["showNotifications"] = m_showNotificationsCheck->isChecked();
+    obj["notifyCopy"] = m_notifyCopyCheck ? m_notifyCopyCheck->isChecked() : false;
+    obj["notifySave"] = m_notifySaveCheck ? m_notifySaveCheck->isChecked() : true;
+    obj["notifyGif"] = m_notifyGifCheck ? m_notifyGifCheck->isChecked() : true;
+    obj["notifyVideo"] = m_notifyVideoCheck ? m_notifyVideoCheck->isChecked() : true;
     obj["playSound"] = m_playSoundCheck->isChecked();
     obj["copyPathAfterSave"] = m_copyPathAfterSaveCheck->isChecked();
     obj["imageFormat"] = m_formatCombo->currentData().toString();
@@ -1112,6 +1512,22 @@ void SettingsDialog::onExportSettings()
         obj["hotkeyModifiers"] = static_cast<int>(mod);
         obj["hotkeyVKey"] = static_cast<int>(vk);
     }
+    auto appendHotkey = [this, &obj](const char *modKey, const char *vkeyKey, QKeySequenceEdit *edit) {
+        UINT mod = 0, vk = 0;
+        if (edit && keySequenceToWin32(edit->keySequence(), mod, vk)) {
+            obj[modKey] = static_cast<int>(mod);
+            obj[vkeyKey] = static_cast<int>(vk);
+        }
+    };
+    appendHotkey("recordingPauseHotkeyModifiers", "recordingPauseHotkeyVKey", m_recordingPauseHotkeyEdit);
+    appendHotkey("recordingStopHotkeyModifiers", "recordingStopHotkeyVKey", m_recordingStopHotkeyEdit);
+    appendHotkey("recordingCancelHotkeyModifiers", "recordingCancelHotkeyVKey", m_recordingCancelHotkeyEdit);
+    QJsonObject overlayShortcuts;
+    for (auto it = m_overlayHotkeyEdits.constBegin(); it != m_overlayHotkeyEdits.constEnd(); ++it) {
+        if (it.value())
+            overlayShortcuts[it.key()] = it.value()->keySequence().toString(QKeySequence::PortableText);
+    }
+    obj["overlayShortcuts"] = overlayShortcuts;
 
     if (m_recordingFpsSpin)
         obj["recordingFps"] = m_recordingFpsSpin->value();
@@ -1119,6 +1535,23 @@ void SettingsDialog::onExportSettings()
         obj["recordingMaxSeconds"] = m_recordingMaxSecSpin->value();
     if (m_recordingLoopCombo)
         obj["recordingLoop"] = m_recordingLoopCombo->currentData().toInt();
+    if (m_videoFpsSpin)
+        obj["videoRecordingFps"] = m_videoFpsSpin->value();
+    if (m_videoMaxSecSpin)
+        obj["videoRecordingMaxSeconds"] = m_videoMaxSecSpin->value();
+    if (m_videoCrfSpin)
+        obj["videoRecordingCrf"] = m_videoCrfSpin->value();
+    const bool desktopAudio = m_videoDesktopAudioCheck && m_videoDesktopAudioCheck->isChecked();
+    const bool microphoneAudio = m_videoMicrophoneCheck && m_videoMicrophoneCheck->isChecked();
+    obj["videoDesktopAudioEnabled"] = desktopAudio;
+    obj["videoMicrophoneEnabled"] = microphoneAudio;
+    obj["videoDesktopAudioVolume"] = m_videoDesktopVolumeSpin ? m_videoDesktopVolumeSpin->value() : 80;
+    obj["videoMicrophoneVolume"] = m_videoMicrophoneVolumeSpin ? m_videoMicrophoneVolumeSpin->value() : 80;
+    obj["videoMicrophoneDevice"] = m_videoMicrophoneDeviceCombo ? m_videoMicrophoneDeviceCombo->currentData().toString() : QStringLiteral("default");
+    obj["videoAudioMode"] = desktopAudio && microphoneAudio ? QStringLiteral("both")
+        : desktopAudio ? QStringLiteral("desktop")
+        : microphoneAudio ? QStringLiteral("microphone")
+        : QStringLiteral("none");
 
     QFile file(path);
     if (file.open(QIODevice::WriteOnly)) {
@@ -1159,6 +1592,11 @@ void SettingsDialog::onImportSettings()
     if (obj.contains("filenamePattern")) m_filenamePatternEdit->setText(obj["filenamePattern"].toString());
     if (obj.contains("autoStart")) m_autoStartCheck->setChecked(obj["autoStart"].toBool());
     if (obj.contains("showNotifications")) m_showNotificationsCheck->setChecked(obj["showNotifications"].toBool());
+    if (m_notifyCopyCheck && obj.contains("notifyCopy")) m_notifyCopyCheck->setChecked(obj["notifyCopy"].toBool());
+    if (m_notifySaveCheck && obj.contains("notifySave")) m_notifySaveCheck->setChecked(obj["notifySave"].toBool());
+    if (m_notifyGifCheck && obj.contains("notifyGif")) m_notifyGifCheck->setChecked(obj["notifyGif"].toBool());
+    if (m_notifyVideoCheck && obj.contains("notifyVideo")) m_notifyVideoCheck->setChecked(obj["notifyVideo"].toBool());
+    if (m_notificationOptionsWidget) m_notificationOptionsWidget->setEnabled(m_showNotificationsCheck->isChecked());
     if (obj.contains("playSound")) m_playSoundCheck->setChecked(obj["playSound"].toBool());
     if (obj.contains("copyPathAfterSave")) m_copyPathAfterSaveCheck->setChecked(obj["copyPathAfterSave"].toBool());
     if (obj.contains("imageFormat")) {
@@ -1206,6 +1644,23 @@ void SettingsDialog::onImportSettings()
             static_cast<UINT>(obj["hotkeyModifiers"].toInt()),
             static_cast<UINT>(obj["hotkeyVKey"].toInt())));
     }
+    auto importHotkey = [&obj](const char *modKey, const char *vkeyKey, QKeySequenceEdit *edit) {
+        if (edit && obj.contains(modKey) && obj.contains(vkeyKey)) {
+            edit->setKeySequence(win32ToKeySequence(
+                static_cast<UINT>(obj[modKey].toInt()),
+                static_cast<UINT>(obj[vkeyKey].toInt())));
+        }
+    };
+    importHotkey("recordingPauseHotkeyModifiers", "recordingPauseHotkeyVKey", m_recordingPauseHotkeyEdit);
+    importHotkey("recordingStopHotkeyModifiers", "recordingStopHotkeyVKey", m_recordingStopHotkeyEdit);
+    importHotkey("recordingCancelHotkeyModifiers", "recordingCancelHotkeyVKey", m_recordingCancelHotkeyEdit);
+    if (obj.contains("overlayShortcuts") && obj["overlayShortcuts"].isObject()) {
+        const QJsonObject shortcuts = obj["overlayShortcuts"].toObject();
+        for (auto it = m_overlayHotkeyEdits.begin(); it != m_overlayHotkeyEdits.end(); ++it) {
+            if (it.value() && shortcuts.contains(it.key()))
+                it.value()->setKeySequence(QKeySequence(shortcuts[it.key()].toString()));
+        }
+    }
     if (m_recordingFpsSpin && obj.contains("recordingFps"))
         m_recordingFpsSpin->setValue(obj["recordingFps"].toInt());
     if (m_recordingMaxSecSpin && obj.contains("recordingMaxSeconds"))
@@ -1214,6 +1669,31 @@ void SettingsDialog::onImportSettings()
         int idx = m_recordingLoopCombo->findData(obj["recordingLoop"].toInt());
         if (idx < 0) idx = 0;
         m_recordingLoopCombo->setCurrentIndex(idx);
+    }
+    if (m_videoFpsSpin && obj.contains("videoRecordingFps"))
+        m_videoFpsSpin->setValue(obj["videoRecordingFps"].toInt());
+    if (m_videoMaxSecSpin && obj.contains("videoRecordingMaxSeconds"))
+        m_videoMaxSecSpin->setValue(obj["videoRecordingMaxSeconds"].toInt());
+    if (m_videoCrfSpin && obj.contains("videoRecordingCrf"))
+        m_videoCrfSpin->setValue(obj["videoRecordingCrf"].toInt());
+    if (m_videoDesktopAudioCheck && obj.contains("videoDesktopAudioEnabled"))
+        m_videoDesktopAudioCheck->setChecked(obj["videoDesktopAudioEnabled"].toBool());
+    if (m_videoMicrophoneCheck && obj.contains("videoMicrophoneEnabled"))
+        m_videoMicrophoneCheck->setChecked(obj["videoMicrophoneEnabled"].toBool());
+    if (m_videoDesktopVolumeSlider && obj.contains("videoDesktopAudioVolume"))
+        m_videoDesktopVolumeSlider->setValue(obj["videoDesktopAudioVolume"].toInt());
+    if (m_videoMicrophoneVolumeSlider && obj.contains("videoMicrophoneVolume"))
+        m_videoMicrophoneVolumeSlider->setValue(obj["videoMicrophoneVolume"].toInt());
+    if (m_videoMicrophoneDeviceCombo && obj.contains("videoMicrophoneDevice")) {
+        int idx = m_videoMicrophoneDeviceCombo->findData(obj["videoMicrophoneDevice"].toString());
+        if (idx < 0) idx = 0;
+        m_videoMicrophoneDeviceCombo->setCurrentIndex(idx);
+    } else if (obj.contains("videoAudioMode")) {
+        const QString mode = obj["videoAudioMode"].toString();
+        if (m_videoDesktopAudioCheck)
+            m_videoDesktopAudioCheck->setChecked(mode == QStringLiteral("desktop") || mode == QStringLiteral("both"));
+        if (m_videoMicrophoneCheck)
+            m_videoMicrophoneCheck->setChecked(mode == QStringLiteral("microphone") || mode == QStringLiteral("both"));
     }
 
     QMessageBox::information(this, TranslationManager::importSettings(), TranslationManager::importSuccess());

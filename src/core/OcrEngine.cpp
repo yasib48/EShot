@@ -61,6 +61,19 @@ QString OcrEngine::mapLanguageTag(const QString &bcp47) {
         {QStringLiteral("it-IT"), QStringLiteral("ita")},
         {QStringLiteral("ru"),  QStringLiteral("rus")},
         {QStringLiteral("ru-RU"), QStringLiteral("rus")},
+        {QStringLiteral("ja"),  QStringLiteral("jpn")},
+        {QStringLiteral("ja-JP"), QStringLiteral("jpn")},
+        {QStringLiteral("zh"),  QStringLiteral("chi_sim")},
+        {QStringLiteral("zh-CN"), QStringLiteral("chi_sim")},
+        {QStringLiteral("ko"),  QStringLiteral("kor")},
+        {QStringLiteral("ko-KR"), QStringLiteral("kor")},
+        {QStringLiteral("pt"),  QStringLiteral("por")},
+        {QStringLiteral("pt-BR"), QStringLiteral("por")},
+        {QStringLiteral("pt-PT"), QStringLiteral("por")},
+        {QStringLiteral("pl"),  QStringLiteral("pol")},
+        {QStringLiteral("pl-PL"), QStringLiteral("pol")},
+        {QStringLiteral("nl"),  QStringLiteral("nld")},
+        {QStringLiteral("nl-NL"), QStringLiteral("nld")},
     };
     if (bcp47.isEmpty()) return QStringLiteral("eng");
     if (kMap.contains(bcp47)) return kMap.value(bcp47);

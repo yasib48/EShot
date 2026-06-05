@@ -1,8 +1,8 @@
 # EShot
 
-Fast, lightweight screenshot and annotation tool for Windows.
+Fast, lightweight Windows screenshot tool with annotations, OCR, GIF recording, video recording, uploads, and pinned captures.
 
-[![Version](https://img.shields.io/badge/version-2.4.8-blue.svg)](https://github.com/Benoks/EShot/releases)
+[![Version](https://img.shields.io/badge/version-3.0.0-blue.svg)](https://github.com/Benoks/EShot/releases)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-lightgrey.svg)](#)
 [![Qt](https://img.shields.io/badge/Qt-6.x-green.svg)](https://www.qt.io/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
@@ -11,78 +11,95 @@ Fast, lightweight screenshot and annotation tool for Windows.
   <img src="preview.png" alt="EShot preview" width="760">
 </p>
 
-EShot is built for quick captures, clean annotations, OCR, uploads, pinned screenshots, and GIF recording without turning into a heavy background app.
+EShot is built for people who want a quick screenshot workflow without a heavy desktop app running in the background. It focuses on region capture, clean annotation, OCR, uploads, pinned screenshots, GIFs, and MP4 screen recording from one compact tray app.
 
 ## Highlights
 
 - Region capture with multi-monitor and high-DPI support
-- Annotation tools: pen, arrow, line, rectangle, ellipse, text, blur, crop, eyedropper, and semi-transparent highlight
+- Annotation tools: pen, arrow, line, rectangle, ellipse, text, highlighter, blur, counter, eraser, eyedropper, and semi-transparent rectangle
 - GIF recording for selected screen areas
-- OCR with bundled Tesseract support and optional language packs
-- Upload support for Catbox and Uguu
-- Pin screenshots on top of the desktop
-- Custom global hotkeys
+- MP4 video recording powered by FFmpeg
+- Desktop audio and microphone support for video recording
+- OCR powered by Tesseract with selectable language packs
+- Catbox and Uguu upload support
+- Pin screenshots above the desktop
+- Quick Settings drawer inside the capture screen
+- Customizable global and in-capture shortcuts
 - Start with Windows through Task Scheduler
-- Update check through GitHub releases
+- GitHub release update check
 
-## What's New in v2.4.0
+## What's New in v3.0.0
 
-- Added GIF recording with configurable FPS, duration, and loop options
-- Added eyedropper tool for picking colors directly from the screen
-- Added semi-transparent rectangle tool for filled highlights
-- Added selection lock to prevent accidental movement while annotating
-- Added adjustable blur intensity
-- Added multiline text support
-- Improved toolbar placement around the selected area
-- Improved undo and redo button states
-- Improved update notification behavior through the tray icon
-- Fixed selection, toolbar, startup, and installer regressions found during the v2.4.0 cycle
+- Added MP4 video recording for selected areas
+- Added FFmpeg integration as an optional installer component
+- Added desktop audio and microphone recording controls
+- Added Quick Settings drawer for capture, GIF, and video settings
+- Added fully customizable screenshot-screen shortcuts for tools and toolbar actions
+- Added more OCR language support: Japanese, Korean, Simplified Chinese, Portuguese, Polish, and Dutch
+- Improved OCR language picker: unavailable languages are shown disabled instead of silently disappearing
+- Improved setup experience for existing installs and already-installed OCR/FFmpeg components
+- Improved first-capture startup performance with overlay pre-warming
+- Improved text annotation controls and movable text editing panel
+- Improved toolbar grouping, spacing, tool visibility options, and annotation selection behavior
+- Improved notifications for saved images, GIFs, and videos
 
 ## Features
 
 ### Capture
 
-- Capture a selected region from the screen
-- Move and resize the selected area before saving or copying
-- Keep the dimension label anchored to the selected area
-- Copy, save, upload, pin, annotate, or run OCR from the capture toolbar
+- Select any region of the screen
+- Move, resize, annotate, copy, save, upload, pin, OCR, record GIF, or record video from the selected area
+- Dimension label stays anchored to the selection
+- Toolbar and side actions reposition when screen space is tight
 
 ### Annotation
 
-EShot includes the common tools needed for fast screenshot markup:
+EShot includes the common tools needed for quick markup:
 
 - Freehand pen
 - Arrow and line
 - Rectangle and ellipse
 - Semi-transparent rectangle
-- Text and multiline text
-- Blur with adjustable intensity
-- Crop
+- Multiline text
+- Mosaic blur with adjustable intensity
+- Counter
+- Eraser
 - Eyedropper color picker
 - Undo and redo
 
-Annotations snap to selection edges where useful, and toolbars reposition automatically when there is not enough screen space outside the selected region.
-
 ### GIF Recording
 
-Record a selected part of the screen as a GIF. Recording settings include FPS, maximum duration, and loop behavior.
+Record a selected area as a GIF. You can configure FPS, maximum duration, and loop behavior.
+
+### Video Recording
+
+Record a selected area as an MP4 video. Video recording uses FFmpeg and supports:
+
+- Configurable FPS
+- Configurable CRF quality
+- Optional duration limit
+- Desktop/system audio
+- Microphone audio
+- Pause, stop, and cancel controls
 
 ### OCR
 
-EShot can extract text from a selected area using Tesseract OCR. The installer can include the main OCR engine and selectable language packs, including English, Turkish, Russian, German, French, Spanish, and Italian.
+EShot can extract text from a selected area using Tesseract OCR. The installer can include the OCR engine and selectable language packs.
+
+Supported language options include English, Turkish, Russian, German, French, Spanish, Italian, Portuguese, Polish, Dutch, Japanese, Korean, and Simplified Chinese. Missing language packs are shown disabled in the OCR dialog.
 
 ### Upload
 
-Upload screenshots directly from the capture toolbar. Supported services:
+Upload screenshots directly from the capture toolbar.
+
+Supported services:
 
 - Catbox
 - Uguu
 
-Catbox and Uguu work without an API key.
-
 ### Pin to Desktop
 
-Pinned screenshots stay above other windows, making them useful for reference images, snippets, notes, UI comparisons, and quick visual memory.
+Pinned screenshots stay above other windows, useful for reference images, snippets, UI comparison, notes, and quick visual memory.
 
 ### Settings
 
@@ -90,32 +107,44 @@ The settings window includes:
 
 - General behavior
 - Capture behavior
-- Recording options
+- GIF and video recording settings
 - Appearance options
-- Interface options
-- Hotkey configuration
+- Interface and toolbar visibility
+- Global capture hotkey
+- Recording hotkeys
+- Screenshot-screen tool/action shortcuts
+- Settings export and import
 
-Settings can be exported and imported, and hotkey combinations are validated before being saved.
+## Default Shortcuts
 
-## Keyboard Shortcuts
-
-Default shortcuts can be changed in Settings.
+Most shortcuts can be changed in Settings.
 
 | Shortcut | Action |
 | --- | --- |
 | `Print Screen` | Start capture |
-| `Enter` | Confirm/copy selected capture |
+| `Enter` | Copy selected capture |
 | `Ctrl+C` | Copy selected capture |
-| `Esc` | Cancel capture or close active overlay |
-| `Shift+Enter` | Add a new line while editing text |
-| `I` | Eyedropper tool |
-| `D` | Semi-transparent rectangle tool |
+| `Ctrl+S` | Save selected capture |
+| `Esc` | Cancel or close overlay |
+| `Shift+Enter` | New line while editing text |
+| `P` | Pen |
+| `A` | Arrow |
+| `L` | Line |
+| `R` | Rectangle |
+| `C` | Circle |
+| `T` | Text |
+| `H` | Highlighter |
+| `B` | Blur |
+| `N` | Counter |
+| `X` | Eraser |
+| `D` | Semi-transparent rectangle |
+| `I` | Eyedropper |
 
 ## Install
 
 1. Download the latest installer from the [Releases page](https://github.com/Benoks/EShot/releases/latest).
 2. Run the setup file.
-3. Select optional OCR language packs if you want OCR support for more languages.
+3. Select optional FFmpeg and OCR components if needed.
 4. Start EShot from the Start menu, desktop shortcut, or tray icon.
 
 If "Start with Windows" is enabled, EShot registers itself through Windows Task Scheduler.
@@ -127,10 +156,8 @@ Requirements:
 - Windows 10 or Windows 11
 - Qt 6
 - CMake
-- A C++17 compatible compiler
-- Inno Setup, only when building the installer
-
-Basic build:
+- C++17 compatible compiler
+- Inno Setup, only for installer builds
 
 ```powershell
 mkdir build
@@ -139,7 +166,7 @@ cmake ..
 cmake --build . --config Release
 ```
 
-Installer builds use the included Inno Setup script:
+Installer:
 
 ```powershell
 iscc EShot_Setup.iss
@@ -153,24 +180,18 @@ EShot.exe --save "C:\path\to\capture.png"
 EShot.exe --silent
 ```
 
-## Project Structure
+## Third-Party Components
 
-```text
-EShot/
-+-- resources/             # Icons and application resources
-+-- tesseract/             # OCR runtime files used by the installer
-+-- CMakeLists.txt         # CMake build configuration
-+-- EShot_Setup.iss        # Inno Setup installer script
-+-- main.cpp               # Application entry point
-+-- MainWindow.*           # Main tray/window behavior
-+-- ScreenshotOverlay.*    # Capture and annotation overlay
-+-- GifRecorder.*          # GIF recording support
-+-- SettingsDialog.*       # Settings UI and persistence
-`-- UpdateChecker.*        # GitHub release update checks
-```
+EShot uses:
+
+- Qt for the desktop UI
+- Tesseract OCR for text recognition
+- Tesseract tessdata language files for OCR language support
+- FFmpeg for video recording
+- Inno Setup for installer packaging
+
+See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for details.
 
 ## License
 
-This project is released under the MIT License. See [LICENSE](LICENSE) for details.
-
-EShot uses Tesseract OCR for text recognition. Tesseract OCR and the official tessdata language files are licensed under the Apache License 2.0. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for third-party notices.
+EShot is released under the MIT License. See [LICENSE](LICENSE).

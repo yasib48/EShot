@@ -110,6 +110,12 @@ void OcrDialog::populateLanguages()
         {"Fran\303\247ais", "fr-FR"},
         {"Espa\303\261ol", "es-ES"},
         {"Italiano", "it-IT"},
+        {"Portugu\303\252s", "pt-BR"},
+        {"Polski", "pl-PL"},
+        {"Nederlands", "nl-NL"},
+        {"\346\227\245\346\234\254\350\252\236", "ja-JP"},
+        {"\355\225\234\352\265\255\354\226\264", "ko-KR"},
+        {"\347\256\200\344\275\223\344\270\255\346\226\207", "zh-CN"},
     };
 
     const QString missingTip = (TranslationManager::currentLanguage() == TranslationManager::Turkish)

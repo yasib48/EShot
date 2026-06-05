@@ -26,6 +26,8 @@
         <file alias="icons/ocr.svg">../icons/ocr.svg</file>
         <file alias="icons/upload.svg">../icons/upload.svg</file>
         <file alias="icons/record.svg">../icons/record.svg</file>
+        <file alias="icons/gif.svg">../icons/gif.svg</file>
+        <file alias="icons/video.svg">../icons/video.svg</file>
         <file alias="icons/scroll.svg">../icons/scroll.svg</file>
         <file alias="icons/menu.svg">../icons/menu.svg</file>
     </qresource>

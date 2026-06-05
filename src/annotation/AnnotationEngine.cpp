@@ -10,6 +10,19 @@
 #include <QTextCursor>
 #include <QTextCharFormat>
 
+namespace {
+double distanceToSegment(const QPointF &p, const QPointF &a, const QPointF &b)
+{
+    const QPointF ab = b - a;
+    const double len2 = QPointF::dotProduct(ab, ab);
+    if (len2 <= 0.0001)
+        return QLineF(p, a).length();
+    const double t = qBound(0.0, QPointF::dotProduct(p - a, ab) / len2, 1.0);
+    const QPointF projection = a + ab * t;
+    return QLineF(p, projection).length();
+}
+}
+
 AnnotationEngine::AnnotationEngine(QObject *parent)
     : QObject(parent)
     , m_currentTool(None)
@@ -369,9 +382,7 @@ bool AnnotationEngine::eraseAnnotationAt(const QPoint &pos)
         const Annotation &ann = m_annotations[i];
         if (ann.points.isEmpty()) continue;
 
-        QRect bounds = annotationBounds(ann, 8);
-
-        if (bounds.contains(pos)) {
+        if (annotationContainsPoint(ann, pos, 8)) {
             Annotation removed = m_annotations[i];
             m_annotations.removeAt(i);
             pushHistory(HistoryAction::Remove, removed, i);
@@ -388,9 +399,7 @@ int AnnotationEngine::findAnnotationAt(const QPoint &pos)
         const Annotation &ann = m_annotations[i];
         if (ann.points.isEmpty()) continue;
 
-        QRect bounds = annotationBounds(ann, 10);
-
-        if (bounds.contains(pos))
+        if (annotationContainsPoint(ann, pos, ann.tool == Text ? 18 : 10))
             return i;
     }
     return -1;
@@ -450,6 +459,73 @@ QRect AnnotationEngine::annotationBounds(const Annotation &ann, int padding) con
     }
     bounds.adjust(-padding, -padding, padding, padding);
     return bounds;
+}
+
+bool AnnotationEngine::annotationContainsPoint(const Annotation &ann, const QPoint &pos, int padding) const
+{
+    if (ann.points.isEmpty())
+        return false;
+
+    const int tolerance = qMax(padding, ann.penWidth + 5);
+
+    switch (ann.tool) {
+    case Pen:
+    case Highlighter: {
+        if (ann.points.size() == 1)
+            return QRect(ann.points.first() - QPoint(tolerance, tolerance), QSize(tolerance * 2, tolerance * 2)).contains(pos);
+        const int strokeTolerance = ann.tool == Highlighter
+            ? qMax(tolerance, ann.penWidth * 3)
+            : tolerance;
+        for (int i = 1; i < ann.points.size(); ++i) {
+            if (distanceToSegment(pos, ann.points[i - 1], ann.points[i]) <= strokeTolerance)
+                return true;
+        }
+        return false;
+    }
+    case Line:
+    case Arrow:
+        if (ann.points.size() < 2)
+            return annotationBounds(ann, tolerance).contains(pos);
+        return distanceToSegment(pos, ann.points.first(), ann.points.last()) <= tolerance;
+
+    case Rectangle: {
+        if (ann.points.size() < 2)
+            return annotationBounds(ann, tolerance).contains(pos);
+        const QRect r = QRect(ann.points.first(), ann.points.last()).normalized();
+        if (!r.adjusted(-tolerance, -tolerance, tolerance, tolerance).contains(pos))
+            return false;
+        const int left = qAbs(pos.x() - r.left());
+        const int right = qAbs(pos.x() - r.right());
+        const int top = qAbs(pos.y() - r.top());
+        const int bottom = qAbs(pos.y() - r.bottom());
+        return qMin(qMin(left, right), qMin(top, bottom)) <= tolerance;
+    }
+    case Circle: {
+        if (ann.points.size() < 2)
+            return annotationBounds(ann, tolerance).contains(pos);
+        const QRect r = QRect(ann.points.first(), ann.points.last()).normalized();
+        if (r.width() <= 0 || r.height() <= 0)
+            return annotationBounds(ann, tolerance).contains(pos);
+        if (!r.adjusted(-tolerance, -tolerance, tolerance, tolerance).contains(pos))
+            return false;
+        const QPointF center = r.center();
+        const double rx = r.width() / 2.0;
+        const double ry = r.height() / 2.0;
+        const double nx = (pos.x() - center.x()) / rx;
+        const double ny = (pos.y() - center.y()) / ry;
+        const double edge = qSqrt(nx * nx + ny * ny);
+        const double normalizedTolerance = tolerance / qMax(1.0, qMin(rx, ry));
+        return qAbs(edge - 1.0) <= normalizedTolerance;
+    }
+    case Text:
+    case Blur:
+    case SemiRect:
+    case Counter:
+        return annotationBounds(ann, padding).contains(pos);
+
+    default:
+        return annotationBounds(ann, padding).contains(pos);
+    }
 }
 
 void AnnotationEngine::pushHistory(HistoryAction::Type type, const Annotation &annotation, int index)

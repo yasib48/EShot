@@ -8,6 +8,8 @@
 #include "../core/TranslationManager.h"
 
 #include <QPainter>
+#include <QPainterPath>
+#include <QLinearGradient>
 #include <QScreen>
 #include <QGuiApplication>
 #include <QClipboard>
@@ -18,25 +20,219 @@
 #include <QStandardPaths>
 #include <functional>
 #include <QVBoxLayout>
+#include <QHBoxLayout>
 #include <QPushButton>
+#include <QLabel>
+#include <QFrame>
+#include <QToolButton>
+#include <QFontComboBox>
+#include <QSpinBox>
+#include <QAbstractSpinBox>
+#include <QSlider>
+#include <QComboBox>
+#include <QCheckBox>
+#include <QSignalBlocker>
+#include <QPropertyAnimation>
+#include <QAbstractAnimation>
+#include <QEasingCurve>
 #include <QDebug>
 #include <QDir>
 #include <QPointer>
 #include <QRegularExpression>
 #include <QCoreApplication>
 #include <QMessageBox>
+#include <QFileInfo>
+#include <QProcess>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
+#include <mmdeviceapi.h>
+#include <functiondiscoverykeys_devpkey.h>
+#include <propsys.h>
 #endif
 
 namespace {
+class SideTabButton : public QPushButton
+{
+public:
+    explicit SideTabButton(const QString &text, QWidget *parent = nullptr)
+        : QPushButton(text, parent)
+    {
+        setFixedSize(28, 118);
+    }
+
+protected:
+    void paintEvent(QPaintEvent *) override
+    {
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing);
+
+        QLinearGradient gradient(rect().topLeft(), rect().bottomRight());
+        if (underMouse()) {
+            gradient.setColorAt(0.0, QColor(82, 82, 82, 245));
+            gradient.setColorAt(1.0, QColor(54, 54, 54, 245));
+        } else {
+            gradient.setColorAt(0.0, QColor(62, 62, 62, 235));
+            gradient.setColorAt(1.0, QColor(43, 43, 43, 235));
+        }
+        QRectF r = rect().adjusted(0, 0, -1, -1);
+        constexpr qreal radius = 6.0;
+        QPainterPath tabPath;
+        tabPath.moveTo(r.left(), r.top());
+        tabPath.lineTo(r.right() - radius, r.top());
+        tabPath.quadTo(r.right(), r.top(), r.right(), r.top() + radius);
+        tabPath.lineTo(r.right(), r.bottom() - radius);
+        tabPath.quadTo(r.right(), r.bottom(), r.right() - radius, r.bottom());
+        tabPath.lineTo(r.left(), r.bottom());
+        tabPath.closeSubpath();
+
+        painter.setPen(QPen(QColor(255, 255, 255, 55), 1));
+        painter.setBrush(gradient);
+        painter.drawPath(tabPath);
+
+        painter.setPen(QPen(QColor(0, 0, 0, 90), 1));
+        painter.drawLine(rect().topLeft(), rect().bottomLeft());
+
+        QFont labelFont = font();
+        labelFont.setPointSize(8);
+        labelFont.setBold(true);
+        labelFont.setLetterSpacing(QFont::AbsoluteSpacing, 1.1);
+        painter.setFont(labelFont);
+        painter.setPen(QColor(245, 245, 245));
+        painter.translate(width() / 2.0, height() / 2.0);
+        painter.rotate(-90);
+        painter.drawText(QRect(-height() / 2, -width() / 2, height(), width()),
+                         Qt::AlignCenter,
+                         text());
+    }
+};
+
 QString defaultSaveDirectory()
 {
     QString picturesPath = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
     if (picturesPath.trimmed().isEmpty())
         picturesPath = QDir::homePath();
     return QDir(picturesPath).filePath(QStringLiteral("EShot"));
+}
+
+#ifdef Q_OS_WIN
+void appendDeviceProperty(IPropertyStore *store, const PROPERTYKEY &key, QStringList &devices)
+{
+    PROPVARIANT value;
+    PropVariantInit(&value);
+    if (SUCCEEDED(store->GetValue(key, &value)) && value.vt == VT_LPWSTR && value.pwszVal) {
+        const QString name = QString::fromWCharArray(value.pwszVal).trimmed();
+        if (!name.isEmpty() && !devices.contains(name))
+            devices.append(name);
+    }
+    PropVariantClear(&value);
+}
+#endif
+
+QString localFfmpegPath()
+{
+    const QString appDir = QCoreApplication::applicationDirPath();
+    const QStringList candidates = {
+        QDir(appDir).filePath(QStringLiteral("ffmpeg/ffmpeg.exe")),
+        QDir(appDir).filePath(QStringLiteral("ffmpeg.exe")),
+        QDir(appDir).filePath(QStringLiteral("../third_party/ffmpeg/bin/ffmpeg.exe")),
+        QDir::current().filePath(QStringLiteral("third_party/ffmpeg/bin/ffmpeg.exe"))
+    };
+    for (const QString &path : candidates) {
+        if (QFileInfo::exists(path))
+            return QFileInfo(path).absoluteFilePath();
+    }
+    return QString();
+}
+
+QStringList windowsAudioInputDevices()
+{
+    QStringList devices;
+#ifdef Q_OS_WIN
+    HRESULT initHr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    const bool shouldUninit = SUCCEEDED(initHr);
+    if (FAILED(initHr) && initHr != RPC_E_CHANGED_MODE)
+        return devices;
+
+    IMMDeviceEnumerator *enumerator = nullptr;
+    HRESULT hr = CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
+                                  __uuidof(IMMDeviceEnumerator),
+                                  reinterpret_cast<void **>(&enumerator));
+    if (SUCCEEDED(hr) && enumerator) {
+        IMMDeviceCollection *collection = nullptr;
+        hr = enumerator->EnumAudioEndpoints(eCapture, DEVICE_STATE_ACTIVE, &collection);
+        if (SUCCEEDED(hr) && collection) {
+            UINT count = 0;
+            collection->GetCount(&count);
+            for (UINT i = 0; i < count; ++i) {
+                IMMDevice *device = nullptr;
+                if (FAILED(collection->Item(i, &device)) || !device)
+                    continue;
+                IPropertyStore *store = nullptr;
+                if (SUCCEEDED(device->OpenPropertyStore(STGM_READ, &store)) && store) {
+                    appendDeviceProperty(store, PKEY_DeviceInterface_FriendlyName, devices);
+                    appendDeviceProperty(store, PKEY_Device_FriendlyName, devices);
+                    appendDeviceProperty(store, PKEY_Device_DeviceDesc, devices);
+                    store->Release();
+                }
+                device->Release();
+            }
+            collection->Release();
+        }
+        enumerator->Release();
+    }
+    if (shouldUninit)
+        CoUninitialize();
+#endif
+    return devices;
+}
+
+QStringList dshowAudioDevices()
+{
+    const QString ffmpeg = localFfmpegPath();
+    QStringList devices;
+    if (ffmpeg.isEmpty())
+        return windowsAudioInputDevices();
+
+    QProcess process;
+    process.setProgram(ffmpeg);
+    process.setArguments({QStringLiteral("-hide_banner"), QStringLiteral("-list_devices"), QStringLiteral("true"),
+                          QStringLiteral("-f"), QStringLiteral("dshow"), QStringLiteral("-i"), QStringLiteral("dummy")});
+    process.setProcessChannelMode(QProcess::MergedChannels);
+    process.start();
+    if (!process.waitForFinished(1800))
+        process.kill();
+
+    const QString output = QString::fromLocal8Bit(process.readAll());
+    QRegularExpression re(QStringLiteral("\"([^\"]+)\"\\s*\\(audio\\)"));
+    auto it = re.globalMatch(output);
+    while (it.hasNext()) {
+        const QString name = it.next().captured(1).trimmed();
+        if (!name.isEmpty() && !devices.contains(name))
+            devices.append(name);
+    }
+    for (const QString &name : windowsAudioInputDevices()) {
+        if (!devices.contains(name))
+            devices.append(name);
+    }
+    return devices;
+}
+
+bool localFfmpegSupportsFormat(const QString &format)
+{
+    const QString ffmpeg = localFfmpegPath();
+    if (ffmpeg.isEmpty())
+        return false;
+
+    QProcess process;
+    process.setProgram(ffmpeg);
+    process.setArguments({QStringLiteral("-hide_banner"), QStringLiteral("-formats")});
+    process.setProcessChannelMode(QProcess::MergedChannels);
+    process.start();
+    if (!process.waitForFinished(1800))
+        process.kill();
+    const QString output = QString::fromLocal8Bit(process.readAll());
+    return output.contains(QRegularExpression(QStringLiteral("\\b%1\\b").arg(QRegularExpression::escape(format))));
 }
 }
 
@@ -91,6 +287,126 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
             QSizeF size = doc->size();
             int h = qMax(30, static_cast<int>(size.height()) + 10);
             m_textEdit->setFixedHeight(h);
+            updateTextEditPanelPosition();
+        }
+    });
+
+    m_textEditPanel = new QWidget(this);
+    m_textEditPanel->setObjectName(QStringLiteral("textEditPanel"));
+    m_textEditPanel->setStyleSheet(R"(
+        QWidget#textEditPanel {
+            background-color: rgba(34, 34, 34, 235);
+            border: 1px solid rgba(255, 255, 255, 55);
+            border-radius: 6px;
+        }
+        QPushButton {
+            background-color: rgba(255, 255, 255, 24);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 42);
+            border-radius: 4px;
+            padding: 2px 8px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        QPushButton:hover { background-color: rgba(255, 255, 255, 38); }
+        QFontComboBox, QSpinBox {
+            background: #2b2b2b;
+            color: white;
+            border: 1px solid #555;
+            border-radius: 4px;
+            padding: 2px 5px;
+            min-height: 22px;
+        }
+        QFontComboBox:hover, QSpinBox:hover {
+            border-color: #6a6a6a;
+            background: #303030;
+        }
+        QFontComboBox:focus, QSpinBox:focus {
+            border-color: #0078D4;
+        }
+        QFontComboBox::drop-down {
+            subcontrol-origin: padding;
+            subcontrol-position: top right;
+            width: 22px;
+            border-left: 1px solid #444;
+            border-top-right-radius: 4px;
+            border-bottom-right-radius: 4px;
+            background: #252525;
+        }
+        QFontComboBox::down-arrow {
+            image: none;
+            width: 0;
+            height: 0;
+            border-left: 4px solid transparent;
+            border-right: 4px solid transparent;
+            border-top: 5px solid #d8d8d8;
+            margin-right: 7px;
+        }
+        QSpinBox {
+            padding-right: 20px;
+        }
+        QSpinBox::up-button, QSpinBox::down-button {
+            subcontrol-origin: border;
+            width: 18px;
+            background: #252525;
+            border-left: 1px solid #444;
+        }
+        QSpinBox::up-button {
+            subcontrol-position: top right;
+            border-top-right-radius: 4px;
+        }
+        QSpinBox::down-button {
+            subcontrol-position: bottom right;
+            border-bottom-right-radius: 4px;
+        }
+        QSpinBox::up-button:hover, QSpinBox::down-button:hover {
+            background: #3a3a3a;
+        }
+        QSpinBox::up-arrow {
+            image: none;
+            width: 0;
+            height: 0;
+            border-left: 4px solid transparent;
+            border-right: 4px solid transparent;
+            border-bottom: 5px solid #d8d8d8;
+        }
+        QSpinBox::down-arrow {
+            image: none;
+            width: 0;
+            height: 0;
+            border-left: 4px solid transparent;
+            border-right: 4px solid transparent;
+            border-top: 5px solid #d8d8d8;
+        }
+    )");
+    QHBoxLayout *textPanelLayout = new QHBoxLayout(m_textEditPanel);
+    textPanelLayout->setContentsMargins(4, 4, 4, 4);
+    textPanelLayout->setSpacing(4);
+    m_textMoveHandle = new QPushButton(QStringLiteral("Move"), m_textEditPanel);
+    m_textMoveHandle->setCursor(Qt::SizeAllCursor);
+    m_textMoveHandle->installEventFilter(this);
+    m_textEditPanel->installEventFilter(this);
+    m_textInlineFontCombo = new QFontComboBox(m_textEditPanel);
+    m_textInlineFontCombo->setFixedWidth(132);
+    m_textInlineSizeSpin = new QSpinBox(m_textEditPanel);
+    m_textInlineSizeSpin->setRange(8, 72);
+    m_textInlineSizeSpin->setFixedWidth(54);
+    textPanelLayout->addWidget(m_textMoveHandle);
+    textPanelLayout->addWidget(m_textInlineFontCombo);
+    textPanelLayout->addWidget(m_textInlineSizeSpin);
+    m_textEditPanel->hide();
+    connect(m_textInlineFontCombo, &QFontComboBox::currentFontChanged, this, [this](const QFont &font) {
+        if (m_annotationEngine) m_annotationEngine->setTextFontFamily(font.family());
+        updateTextEditorStyle();
+    });
+    connect(m_textInlineSizeSpin, qOverload<int>(&QSpinBox::valueChanged), this, [this](int size) {
+        if (m_annotationEngine) m_annotationEngine->setTextFontSize(size);
+        updateTextEditorStyle();
+        if (m_textEdit && m_textEdit->isVisible()) {
+            QTextDocument *doc = m_textEdit->document();
+            int h = qMax(30, static_cast<int>(doc->size().height()) + 10);
+            m_textEdit->setFixedHeight(h);
+            updateTextEditPanelPosition();
         }
     });
 
@@ -111,22 +427,49 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
     });
     connect(m_toolbar, &AnnotationToolbar::penWidthChanged, [this](int w) {
         if (m_annotationEngine) m_annotationEngine->setPenWidth(w);
+        if (m_quickPenWidthSlider) {
+            QSignalBlocker blocker(m_quickPenWidthSlider);
+            m_quickPenWidthSlider->setValue(w);
+        }
     });
     connect(m_toolbar, &AnnotationToolbar::textFontFamilyChanged, [this](const QString &family) {
         if (m_annotationEngine) m_annotationEngine->setTextFontFamily(family);
+        if (m_textEdit && m_textEdit->isVisible()) {
+            if (m_textInlineFontCombo) {
+                QSignalBlocker blocker(m_textInlineFontCombo);
+                m_textInlineFontCombo->setCurrentFont(QFont(family));
+            }
+            updateTextEditorStyle();
+            updateTextEditPanelPosition();
+        }
     });
     connect(m_toolbar, &AnnotationToolbar::textFontSizeChanged, [this](int size) {
         if (m_annotationEngine) m_annotationEngine->setTextFontSize(size);
+        if (m_textEdit && m_textEdit->isVisible()) {
+            if (m_textInlineSizeSpin) {
+                QSignalBlocker blocker(m_textInlineSizeSpin);
+                m_textInlineSizeSpin->setValue(size);
+            }
+            updateTextEditorStyle();
+            updateTextEditPanelPosition();
+        }
     });
     connect(m_toolbar, &AnnotationToolbar::blurIntensityChanged, [this](int i) {
         if (m_annotationEngine) m_annotationEngine->setBlurIntensity(i);
+        if (m_quickBlurSlider) {
+            QSignalBlocker blocker(m_quickBlurSlider);
+            m_quickBlurSlider->setValue(i);
+        }
     });
     connect(m_toolbar, &AnnotationToolbar::eyedropperRequested, this, &CaptureOverlay::onEyedropperRequested);
     connect(m_toolbar, &AnnotationToolbar::lockToggled, this, &CaptureOverlay::onSelectionLockToggled);
     connect(m_toolbar, &AnnotationToolbar::ocrRequested, this, &CaptureOverlay::onOcrRequested);
     connect(m_toolbar, &AnnotationToolbar::uploadRequested, this, &CaptureOverlay::onUploadRequested);
     connect(m_toolbar, &AnnotationToolbar::gifRequested, this, &CaptureOverlay::onGifRequested);
+    connect(m_toolbar, &AnnotationToolbar::videoRequested, this, &CaptureOverlay::onVideoRequested);
     connect(m_annotationEngine, &AnnotationEngine::annotationAdded, this, &CaptureOverlay::updateUndoRedoState);
+
+    setupToolSettingsDrawer();
 
     m_actionPanel = new QWidget(this);
     m_actionPanel->setStyleSheet(R"(
@@ -187,6 +530,581 @@ CaptureOverlay::CaptureOverlay(QWidget *parent)
 }
 
 CaptureOverlay::~CaptureOverlay() {}
+
+void CaptureOverlay::setupToolSettingsDrawer()
+{
+    m_toolSettingsButton = new SideTabButton(TranslationManager::quickSettings(), this);
+    m_toolSettingsButton->setToolTip(TranslationManager::quickSettings());
+    m_toolSettingsButton->setCursor(Qt::PointingHandCursor);
+    m_toolSettingsButton->hide();
+    connect(m_toolSettingsButton, &QPushButton::clicked, this, [this]() {
+        setToolSettingsDrawerVisible(m_toolSettingsDrawer && !m_toolSettingsDrawer->isVisible());
+    });
+
+    m_toolSettingsDrawer = new QWidget(this);
+    m_toolSettingsDrawer->setObjectName(QStringLiteral("toolSettingsDrawer"));
+    m_toolSettingsDrawer->setFixedWidth(258);
+    m_toolSettingsDrawer->setStyleSheet(R"(
+        QWidget#toolSettingsDrawer {
+            background-color: rgba(37, 37, 37, 248);
+            border: 1px solid rgba(255, 255, 255, 50);
+            border-top-left-radius: 0px;
+            border-bottom-left-radius: 0px;
+            border-top-right-radius: 7px;
+            border-bottom-right-radius: 7px;
+        }
+        QLabel { color: #d6d6d6; font-size: 11px; }
+        QLabel[section="true"] { color: #f2f2f2; font-size: 12px; font-weight: 700; }
+        QLabel[valueBadge="true"] {
+            color: #f4f4f4;
+            background-color: rgba(255, 255, 255, 18);
+            border: 1px solid rgba(255, 255, 255, 38);
+            border-radius: 4px;
+            padding: 1px 5px;
+            min-width: 24px;
+            qproperty-alignment: AlignCenter;
+            font-size: 10px;
+            font-weight: 700;
+        }
+        QSlider::groove:horizontal {
+            background: #484848;
+            height: 4px;
+            border-radius: 2px;
+        }
+        QSlider::handle:horizontal {
+            background: #e8e8e8;
+            border: 1px solid #9a9a9a;
+            width: 14px;
+            height: 14px;
+            margin: -5px 0;
+            border-radius: 7px;
+        }
+        QSpinBox, QComboBox {
+            background: rgba(52, 52, 52, 235);
+            color: #f1f1f1;
+            border: 1px solid rgba(255, 255, 255, 55);
+            border-radius: 5px;
+            min-height: 25px;
+            padding: 2px 8px;
+            selection-background-color: #4a4a4a;
+        }
+        QSpinBox:hover, QComboBox:hover {
+            background: rgba(62, 62, 62, 240);
+            border-color: rgba(255, 255, 255, 82);
+        }
+        QSpinBox:focus, QComboBox:focus {
+            border-color: rgba(255, 255, 255, 110);
+        }
+        QCheckBox {
+            color: #d6d6d6;
+            font-size: 11px;
+            spacing: 7px;
+        }
+        QCheckBox::indicator {
+            width: 13px;
+            height: 13px;
+            border-radius: 3px;
+            border: 1px solid rgba(255, 255, 255, 70);
+            background: rgba(255, 255, 255, 12);
+        }
+        QCheckBox::indicator:checked {
+            background: #4ea1ff;
+            border-color: #77bbff;
+        }
+        QComboBox::drop-down {
+            subcontrol-origin: padding;
+            subcontrol-position: top right;
+            width: 22px;
+            border-left: 1px solid rgba(255, 255, 255, 36);
+            border-top-right-radius: 5px;
+            border-bottom-right-radius: 5px;
+            background: rgba(255, 255, 255, 10);
+        }
+        QComboBox::down-arrow {
+            image: none;
+            width: 0px;
+            height: 0px;
+        }
+    )");
+
+    QVBoxLayout *drawerLayout = new QVBoxLayout(m_toolSettingsDrawer);
+    drawerLayout->setContentsMargins(12, 10, 12, 11);
+    drawerLayout->setSpacing(8);
+
+    QLabel *title = new QLabel(TranslationManager::quickSettings(), m_toolSettingsDrawer);
+    title->setProperty("section", true);
+    drawerLayout->addWidget(title);
+
+    auto addSliderRow = [&](const QString &label, QSlider *&slider, QLabel *&valueLabel, int min, int max, int value) {
+        QLabel *rowLabel = new QLabel(label, m_toolSettingsDrawer);
+        slider = new QSlider(Qt::Horizontal, m_toolSettingsDrawer);
+        slider->setRange(min, max);
+        slider->setValue(value);
+        valueLabel = new QLabel(QString::number(value), m_toolSettingsDrawer);
+        valueLabel->setProperty("valueBadge", true);
+        valueLabel->setFixedWidth(34);
+        drawerLayout->addWidget(rowLabel);
+        auto *valueRow = new QHBoxLayout();
+        valueRow->setContentsMargins(0, 0, 0, 0);
+        valueRow->setSpacing(7);
+        valueRow->addWidget(slider, 1);
+        valueRow->addWidget(valueLabel);
+        drawerLayout->addLayout(valueRow);
+    };
+
+    addSliderRow(TranslationManager::quickPenWidth(), m_quickPenWidthSlider, m_quickPenWidthValueLabel, 1, 20, 3);
+    addSliderRow(TranslationManager::quickBlurIntensity(), m_quickBlurSlider, m_quickBlurValueLabel, 4, 64, 16);
+
+    QLabel *gifTitle = new QLabel(TranslationManager::quickGifRecording(), m_toolSettingsDrawer);
+    gifTitle->setProperty("section", true);
+    drawerLayout->addWidget(gifTitle);
+
+    auto *fpsRow = new QHBoxLayout();
+    fpsRow->addWidget(new QLabel(TranslationManager::recordingFpsLabel().remove(QChar(':')), m_toolSettingsDrawer));
+    m_quickGifFpsSpin = new QSpinBox(m_toolSettingsDrawer);
+    m_quickGifFpsSpin->setRange(1, 30);
+    m_quickGifFpsSpin->setButtonSymbols(QAbstractSpinBox::NoButtons);
+    fpsRow->addWidget(m_quickGifFpsSpin);
+    drawerLayout->addLayout(fpsRow);
+
+    auto *timeRow = new QHBoxLayout();
+    timeRow->addWidget(new QLabel(TranslationManager::quickMaxSeconds(), m_toolSettingsDrawer));
+    m_quickGifSecondsSpin = new QSpinBox(m_toolSettingsDrawer);
+    m_quickGifSecondsSpin->setRange(0, 600);
+    m_quickGifSecondsSpin->setButtonSymbols(QAbstractSpinBox::NoButtons);
+    timeRow->addWidget(m_quickGifSecondsSpin);
+    drawerLayout->addLayout(timeRow);
+
+    auto *loopRow = new QHBoxLayout();
+    loopRow->addWidget(new QLabel(TranslationManager::recordingLoop().remove(QChar(':')), m_toolSettingsDrawer));
+    m_quickGifLoopCombo = new QComboBox(m_toolSettingsDrawer);
+    m_quickGifLoopCombo->addItem(TranslationManager::recordingLoopInfinite(), 0);
+    m_quickGifLoopCombo->addItem(QStringLiteral("1"), 1);
+    m_quickGifLoopCombo->addItem(QStringLiteral("2"), 2);
+    m_quickGifLoopCombo->addItem(QStringLiteral("3"), 3);
+    m_quickGifLoopCombo->addItem(QStringLiteral("5"), 5);
+    m_quickGifLoopCombo->addItem(QStringLiteral("10"), 10);
+    loopRow->addWidget(m_quickGifLoopCombo);
+    drawerLayout->addLayout(loopRow);
+
+    QFrame *line = new QFrame(m_toolSettingsDrawer);
+    line->setFrameShape(QFrame::HLine);
+    line->setStyleSheet(QStringLiteral("color: rgba(255,255,255,45);"));
+    drawerLayout->addWidget(line);
+    QLabel *videoTitle = new QLabel(TranslationManager::videoRecordingTitle(), m_toolSettingsDrawer);
+    videoTitle->setProperty("section", true);
+    drawerLayout->addWidget(videoTitle);
+
+    auto *videoFpsRow = new QHBoxLayout();
+    videoFpsRow->addWidget(new QLabel(TranslationManager::recordingFpsLabel().remove(QChar(':')), m_toolSettingsDrawer));
+    m_quickVideoFpsSpin = new QSpinBox(m_toolSettingsDrawer);
+    m_quickVideoFpsSpin->setRange(1, 60);
+    m_quickVideoFpsSpin->setButtonSymbols(QAbstractSpinBox::NoButtons);
+    videoFpsRow->addWidget(m_quickVideoFpsSpin);
+    drawerLayout->addLayout(videoFpsRow);
+
+    auto *videoTimeRow = new QHBoxLayout();
+    videoTimeRow->addWidget(new QLabel(TranslationManager::quickMaxSeconds(), m_toolSettingsDrawer));
+    m_quickVideoSecondsSpin = new QSpinBox(m_toolSettingsDrawer);
+    m_quickVideoSecondsSpin->setRange(0, 3600);
+    m_quickVideoSecondsSpin->setSpecialValueText(TranslationManager::recordingUnlimited());
+    m_quickVideoSecondsSpin->setButtonSymbols(QAbstractSpinBox::NoButtons);
+    videoTimeRow->addWidget(m_quickVideoSecondsSpin);
+    drawerLayout->addLayout(videoTimeRow);
+
+    auto *videoCrfRow = new QHBoxLayout();
+    videoCrfRow->addWidget(new QLabel(TranslationManager::videoQualityCrf(), m_toolSettingsDrawer));
+    m_quickVideoCrfSpin = new QSpinBox(m_toolSettingsDrawer);
+    m_quickVideoCrfSpin->setRange(18, 32);
+    m_quickVideoCrfSpin->setValue(24);
+    m_quickVideoCrfSpin->setToolTip(TranslationManager::videoCrfHint());
+    m_quickVideoCrfSpin->setButtonSymbols(QAbstractSpinBox::NoButtons);
+    videoCrfRow->addWidget(m_quickVideoCrfSpin);
+    drawerLayout->addLayout(videoCrfRow);
+
+    QLabel *audioTitle = new QLabel(TranslationManager::audioMode(), m_toolSettingsDrawer);
+    audioTitle->setProperty("section", true);
+    drawerLayout->addWidget(audioTitle);
+
+    auto addAudioVolumeRow = [&](QCheckBox *&check, QSlider *&slider, QLabel *&valueLabel,
+                                 const QString &label, const char *enabledKey, const char *volumeKey) {
+        check = new QCheckBox(label, m_toolSettingsDrawer);
+        check->setChecked(false);
+        drawerLayout->addWidget(check);
+
+        auto *valueRow = new QHBoxLayout();
+        valueRow->setContentsMargins(0, 0, 0, 0);
+        valueRow->setSpacing(7);
+        slider = new QSlider(Qt::Horizontal, m_toolSettingsDrawer);
+        slider->setRange(0, 100);
+        slider->setValue(80);
+        valueLabel = new QLabel(QStringLiteral("80"), m_toolSettingsDrawer);
+        valueLabel->setProperty("valueBadge", true);
+        valueLabel->setFixedWidth(34);
+        valueRow->addWidget(slider, 1);
+        valueRow->addWidget(valueLabel);
+        drawerLayout->addLayout(valueRow);
+
+        auto updateEnabled = [slider, valueLabel](bool enabled) {
+            slider->setEnabled(enabled);
+            valueLabel->setEnabled(enabled);
+            slider->setGraphicsEffect(nullptr);
+            slider->setStyleSheet(enabled ? QString() : QStringLiteral("opacity: 0.45;"));
+            valueLabel->setStyleSheet(enabled
+                ? QStringLiteral("color: #f4f4f4; background-color: rgba(255, 255, 255, 18); border: 1px solid rgba(255, 255, 255, 38); border-radius: 4px; padding: 1px 5px;")
+                : QStringLiteral("color: #777; background-color: rgba(255, 255, 255, 8); border: 1px solid rgba(255, 255, 255, 18); border-radius: 4px; padding: 1px 5px;"));
+        };
+        updateEnabled(check->isChecked());
+
+        connect(check, &QCheckBox::toggled, this, [enabledKey, updateEnabled](bool enabled) {
+            QSettings s("EShot", "EShot");
+            s.setValue(QString::fromLatin1(enabledKey), enabled);
+            updateEnabled(enabled);
+        });
+        connect(slider, &QSlider::valueChanged, this, [valueLabel, volumeKey](int value) {
+            valueLabel->setText(QString::number(value));
+            QSettings s("EShot", "EShot");
+            s.setValue(QString::fromLatin1(volumeKey), value);
+        });
+    };
+
+    addAudioVolumeRow(m_quickDesktopAudioCheck, m_quickDesktopVolumeSlider, m_quickDesktopVolumeLabel,
+                      TranslationManager::audioDesktop(), "videoDesktopAudioEnabled", "videoDesktopAudioVolume");
+    addAudioVolumeRow(m_quickMicrophoneCheck, m_quickMicrophoneVolumeSlider, m_quickMicrophoneVolumeLabel,
+                      TranslationManager::audioMicrophone(), "videoMicrophoneEnabled", "videoMicrophoneVolume");
+
+    const QStringList audioDevices = dshowAudioDevices();
+    const QStringList activeInputDevices = windowsAudioInputDevices();
+    auto *desktopDeviceRow = new QHBoxLayout();
+    desktopDeviceRow->addWidget(new QLabel(TranslationManager::audioSource(), m_toolSettingsDrawer));
+    m_quickDesktopAudioDeviceCombo = new QComboBox(m_toolSettingsDrawer);
+    bool hasDesktopCandidate = true;
+    m_quickDesktopAudioDeviceCombo->addItem(TranslationManager::audioSystemLoopback(), QStringLiteral("__wasapi__"));
+    for (const QString &device : audioDevices) {
+        const QString lower = device.toLower();
+        const bool looksLikeDesktop = lower.contains(QStringLiteral("virtual-audio-capturer")) ||
+            lower.contains(QStringLiteral("stereo mix")) ||
+            lower.contains(QStringLiteral("what u hear")) ||
+            lower.contains(QStringLiteral("loopback")) ||
+            lower.contains(QStringLiteral("wave out"));
+        if (!looksLikeDesktop)
+            continue;
+        hasDesktopCandidate = true;
+        m_quickDesktopAudioDeviceCombo->addItem(device, device);
+    }
+    desktopDeviceRow->addWidget(m_quickDesktopAudioDeviceCombo);
+    drawerLayout->addLayout(desktopDeviceRow);
+    if (m_quickDesktopAudioCheck)
+        m_quickDesktopAudioCheck->setEnabled(true);
+    m_quickDesktopAudioDeviceCombo->setEnabled(hasDesktopCandidate && m_quickDesktopAudioCheck && m_quickDesktopAudioCheck->isChecked());
+    connect(m_quickDesktopAudioCheck, &QCheckBox::toggled,
+            this, [this, hasDesktopCandidate](bool enabled) {
+                if (m_quickDesktopAudioDeviceCombo)
+                    m_quickDesktopAudioDeviceCombo->setEnabled(hasDesktopCandidate && enabled);
+            });
+
+    auto *micDeviceRow = new QHBoxLayout();
+    micDeviceRow->addWidget(new QLabel(TranslationManager::audioMicrophoneDevice(), m_toolSettingsDrawer));
+    m_quickMicrophoneDeviceCombo = new QComboBox(m_toolSettingsDrawer);
+    if (activeInputDevices.isEmpty() && audioDevices.isEmpty()) {
+        m_quickMicrophoneDeviceCombo->addItem(QStringLiteral("Default"), QStringLiteral("default"));
+    } else {
+        m_quickMicrophoneDeviceCombo->addItem(QStringLiteral("Default"), activeInputDevices.isEmpty() ? audioDevices.first() : activeInputDevices.first());
+    }
+    for (const QString &device : activeInputDevices) {
+        if (m_quickMicrophoneDeviceCombo->findData(device) >= 0)
+            continue;
+        m_quickMicrophoneDeviceCombo->addItem(device, device);
+    }
+    for (const QString &device : audioDevices) {
+        if (m_quickMicrophoneDeviceCombo->findData(device) >= 0)
+            continue;
+        m_quickMicrophoneDeviceCombo->addItem(device, device);
+    }
+    micDeviceRow->addWidget(m_quickMicrophoneDeviceCombo);
+    drawerLayout->addLayout(micDeviceRow);
+    m_quickMicrophoneDeviceCombo->setEnabled(m_quickMicrophoneCheck && m_quickMicrophoneCheck->isChecked());
+    connect(m_quickMicrophoneCheck, &QCheckBox::toggled,
+            m_quickMicrophoneDeviceCombo, &QComboBox::setEnabled);
+
+    connect(m_quickPenWidthSlider, &QSlider::valueChanged, this, [this](int value) {
+        if (m_quickPenWidthValueLabel)
+            m_quickPenWidthValueLabel->setText(QString::number(value));
+        if (m_annotationEngine) m_annotationEngine->setPenWidth(value);
+    });
+    connect(m_quickBlurSlider, &QSlider::valueChanged, this, [this](int value) {
+        if (m_quickBlurValueLabel)
+            m_quickBlurValueLabel->setText(QString::number(value));
+        if (m_annotationEngine) m_annotationEngine->setBlurIntensity(value);
+        if (m_toolbar) m_toolbar->setBlurIntensity(value);
+        QSettings s("EShot", "EShot");
+        s.setValue("blurIntensity", value);
+    });
+    connect(m_quickGifFpsSpin, qOverload<int>(&QSpinBox::valueChanged), this, [](int value) {
+        QSettings s("EShot", "EShot");
+        s.setValue("recordingFps", value);
+    });
+    connect(m_quickGifSecondsSpin, qOverload<int>(&QSpinBox::valueChanged), this, [](int value) {
+        QSettings s("EShot", "EShot");
+        s.setValue("recordingMaxSeconds", value);
+    });
+    connect(m_quickGifLoopCombo, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int) {
+        QSettings s("EShot", "EShot");
+        s.setValue("recordingLoop", m_quickGifLoopCombo->currentData().toInt());
+    });
+    connect(m_quickVideoFpsSpin, qOverload<int>(&QSpinBox::valueChanged), this, [](int value) {
+        QSettings s("EShot", "EShot");
+        s.setValue("videoRecordingFps", value);
+    });
+    connect(m_quickVideoSecondsSpin, qOverload<int>(&QSpinBox::valueChanged), this, [](int value) {
+        QSettings s("EShot", "EShot");
+        s.setValue("videoRecordingMaxSeconds", value);
+    });
+    connect(m_quickVideoCrfSpin, qOverload<int>(&QSpinBox::valueChanged), this, [](int value) {
+        QSettings s("EShot", "EShot");
+        s.setValue("videoRecordingCrf", value);
+    });
+    connect(m_quickMicrophoneDeviceCombo, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int) {
+        QSettings s("EShot", "EShot");
+        s.setValue("videoMicrophoneDevice", m_quickMicrophoneDeviceCombo->currentData().toString());
+    });
+    connect(m_quickDesktopAudioDeviceCombo, qOverload<int>(&QComboBox::currentIndexChanged), this, [this](int) {
+        QSettings s("EShot", "EShot");
+        s.setValue("videoDesktopAudioDevice", m_quickDesktopAudioDeviceCombo->currentData().toString());
+    });
+
+    m_toolSettingsDrawer->hide();
+
+    m_toolSettingsAnimation = new QPropertyAnimation(m_toolSettingsDrawer, "geometry", this);
+    m_toolSettingsAnimation->setDuration(185);
+    m_toolSettingsAnimation->setEasingCurve(QEasingCurve::OutCubic);
+    connect(m_toolSettingsAnimation, &QPropertyAnimation::finished, this, [this]() {
+        if (m_toolSettingsDrawer && m_toolSettingsDrawer->property("closing").toBool()) {
+            m_toolSettingsDrawer->hide();
+            m_toolSettingsDrawer->setProperty("closing", false);
+        }
+        if (m_toolSettingsButton)
+            m_toolSettingsButton->raise();
+    });
+
+    m_toolSettingsButtonAnimation = new QPropertyAnimation(m_toolSettingsButton, "geometry", this);
+    m_toolSettingsButtonAnimation->setDuration(185);
+    m_toolSettingsButtonAnimation->setEasingCurve(QEasingCurve::OutCubic);
+}
+
+void CaptureOverlay::updateToolSettingsDrawerPosition()
+{
+    if (!m_toolSettingsButton || !m_toolSettingsDrawer || !m_selectionComplete)
+        return;
+
+    QRect selRect = normalizedSelectionRect();
+    QRect monitorRect = monitorRectAt(selRect.center());
+    if (monitorRect.isEmpty())
+        monitorRect = rect();
+
+    m_toolSettingsDrawer->adjustSize();
+    const bool drawerOpen = m_toolSettingsDrawer->isVisible()
+        && !m_toolSettingsDrawer->property("closing").toBool();
+    int bx = drawerOpen
+        ? monitorRect.left() + m_toolSettingsDrawer->width() - 1
+        : monitorRect.left();
+    bx = qBound(0, bx, width() - m_toolSettingsButton->width());
+    int by = qBound(monitorRect.top() + 32,
+                    selRect.center().y() - m_toolSettingsButton->height() / 2,
+                    monitorRect.bottom() - m_toolSettingsButton->height() - 32);
+    m_toolSettingsButton->move(bx, by);
+    m_toolSettingsButton->show();
+    m_toolSettingsButton->raise();
+
+    if (!m_toolSettingsDrawer->isVisible())
+        return;
+
+    if (m_toolSettingsAnimation && m_toolSettingsAnimation->state() == QAbstractAnimation::Running)
+        return;
+
+    int dx = monitorRect.left();
+    int dy = m_toolSettingsButton->y() - 26;
+    dy = qBound(5, dy, height() - m_toolSettingsDrawer->height() - 5);
+    m_toolSettingsDrawer->move(dx, dy);
+    m_toolSettingsDrawer->raise();
+    m_toolSettingsButton->raise();
+}
+
+void CaptureOverlay::setToolSettingsDrawerVisible(bool visible)
+{
+    if (!m_toolSettingsDrawer || !m_toolSettingsButton)
+        return;
+
+    QRect selRect = normalizedSelectionRect();
+    QRect monitorRect = monitorRectAt(selRect.center());
+    if (monitorRect.isEmpty())
+        monitorRect = rect();
+
+    m_toolSettingsDrawer->adjustSize();
+    const int drawerW = m_toolSettingsDrawer->width();
+    const int drawerH = m_toolSettingsDrawer->height();
+    const int drawerVisibleX = monitorRect.left();
+    const int drawerHiddenX = monitorRect.left() - drawerW;
+    const int buttonClosedX = qBound(0, monitorRect.left(), width() - m_toolSettingsButton->width());
+    const int buttonOpenX = qBound(0, monitorRect.left() + drawerW - 1, width() - m_toolSettingsButton->width());
+    const int drawerY = qBound(5,
+                               m_toolSettingsButton->y() - 26,
+                               height() - drawerH - 5);
+    const int buttonY = qBound(monitorRect.top() + 32,
+                               m_toolSettingsButton->y(),
+                               monitorRect.bottom() - m_toolSettingsButton->height() - 32);
+
+    if (m_toolSettingsAnimation)
+        m_toolSettingsAnimation->stop();
+    if (m_toolSettingsButtonAnimation)
+        m_toolSettingsButtonAnimation->stop();
+
+    if (visible) {
+        QSettings s("EShot", "EShot");
+        if (m_quickPenWidthSlider && m_annotationEngine) {
+            QSignalBlocker blocker(m_quickPenWidthSlider);
+            const int value = m_annotationEngine->penWidth();
+            m_quickPenWidthSlider->setValue(value);
+            if (m_quickPenWidthValueLabel)
+                m_quickPenWidthValueLabel->setText(QString::number(value));
+        }
+        if (m_quickBlurSlider && m_annotationEngine) {
+            QSignalBlocker blocker(m_quickBlurSlider);
+            const int value = m_annotationEngine->blurIntensity();
+            m_quickBlurSlider->setValue(value);
+            if (m_quickBlurValueLabel)
+                m_quickBlurValueLabel->setText(QString::number(value));
+        }
+        if (m_quickGifFpsSpin) {
+            QSignalBlocker blocker(m_quickGifFpsSpin);
+            m_quickGifFpsSpin->setValue(s.value("recordingFps", 10).toInt());
+        }
+        if (m_quickGifSecondsSpin) {
+            QSignalBlocker blocker(m_quickGifSecondsSpin);
+            m_quickGifSecondsSpin->setValue(s.value("recordingMaxSeconds", 30).toInt());
+        }
+        if (m_quickGifLoopCombo) {
+            QSignalBlocker blocker(m_quickGifLoopCombo);
+            int idx = m_quickGifLoopCombo->findData(s.value("recordingLoop", 0).toInt());
+            if (idx < 0) idx = 0;
+            m_quickGifLoopCombo->setCurrentIndex(idx);
+        }
+        if (m_quickVideoFpsSpin) {
+            QSignalBlocker blocker(m_quickVideoFpsSpin);
+            m_quickVideoFpsSpin->setValue(s.value("videoRecordingFps", 30).toInt());
+        }
+        if (m_quickVideoSecondsSpin) {
+            QSignalBlocker blocker(m_quickVideoSecondsSpin);
+            m_quickVideoSecondsSpin->setValue(s.value("videoRecordingMaxSeconds", 0).toInt());
+        }
+        if (m_quickVideoCrfSpin) {
+            QSignalBlocker blocker(m_quickVideoCrfSpin);
+            m_quickVideoCrfSpin->setValue(s.value("videoRecordingCrf", 24).toInt());
+        }
+        if (m_quickDesktopAudioCheck)
+            m_quickDesktopAudioCheck->setChecked(s.value("videoDesktopAudioEnabled", false).toBool());
+        if (m_quickDesktopVolumeSlider) {
+            QSignalBlocker blocker(m_quickDesktopVolumeSlider);
+            const int value = s.value("videoDesktopAudioVolume", 80).toInt();
+            m_quickDesktopVolumeSlider->setValue(value);
+            if (m_quickDesktopVolumeLabel)
+                m_quickDesktopVolumeLabel->setText(QString::number(value));
+        }
+        if (m_quickDesktopAudioDeviceCombo) {
+            QSignalBlocker blocker(m_quickDesktopAudioDeviceCombo);
+            int idx = m_quickDesktopAudioDeviceCombo->findData(s.value("videoDesktopAudioDevice", "__wasapi__").toString());
+            if (idx < 0) idx = 0;
+            m_quickDesktopAudioDeviceCombo->setCurrentIndex(idx);
+            const bool hasDevice = !m_quickDesktopAudioDeviceCombo->currentData().toString().isEmpty();
+            if (!hasDevice && m_quickDesktopAudioCheck) {
+                QSignalBlocker checkBlocker(m_quickDesktopAudioCheck);
+                m_quickDesktopAudioCheck->setChecked(false);
+                s.setValue("videoDesktopAudioEnabled", false);
+            }
+            m_quickDesktopAudioDeviceCombo->setEnabled(hasDevice && m_quickDesktopAudioCheck && m_quickDesktopAudioCheck->isChecked());
+        }
+        if (m_quickMicrophoneCheck)
+            m_quickMicrophoneCheck->setChecked(s.value("videoMicrophoneEnabled", false).toBool());
+        if (m_quickMicrophoneVolumeSlider) {
+            QSignalBlocker blocker(m_quickMicrophoneVolumeSlider);
+            const int value = s.value("videoMicrophoneVolume", 80).toInt();
+            m_quickMicrophoneVolumeSlider->setValue(value);
+            if (m_quickMicrophoneVolumeLabel)
+                m_quickMicrophoneVolumeLabel->setText(QString::number(value));
+        }
+        if (m_quickMicrophoneDeviceCombo) {
+            QSignalBlocker blocker(m_quickMicrophoneDeviceCombo);
+            int idx = m_quickMicrophoneDeviceCombo->findData(s.value("videoMicrophoneDevice", "default").toString());
+            if (idx < 0) idx = 0;
+            m_quickMicrophoneDeviceCombo->setCurrentIndex(idx);
+        }
+        const QRect startRect = m_toolSettingsDrawer->isVisible()
+            ? m_toolSettingsDrawer->geometry()
+            : QRect(drawerHiddenX, drawerY, drawerW, drawerH);
+        const QRect endRect(drawerVisibleX, drawerY, drawerW, drawerH);
+        const QRect buttonStartRect = m_toolSettingsButton->geometry();
+        const QRect buttonEndRect(buttonOpenX, buttonY, m_toolSettingsButton->width(), m_toolSettingsButton->height());
+        m_toolSettingsDrawer->setProperty("closing", false);
+        m_toolSettingsDrawer->setGeometry(startRect);
+        m_toolSettingsDrawer->show();
+        m_toolSettingsDrawer->raise();
+        m_toolSettingsButton->raise();
+        if (m_toolSettingsAnimation) {
+            m_toolSettingsAnimation->setStartValue(startRect);
+            m_toolSettingsAnimation->setEndValue(endRect);
+            m_toolSettingsAnimation->start();
+        } else {
+            m_toolSettingsDrawer->setGeometry(endRect);
+        }
+        if (m_toolSettingsButtonAnimation) {
+            m_toolSettingsButtonAnimation->setStartValue(buttonStartRect);
+            m_toolSettingsButtonAnimation->setEndValue(buttonEndRect);
+            m_toolSettingsButtonAnimation->start();
+        } else {
+            m_toolSettingsButton->setGeometry(buttonEndRect);
+        }
+    } else {
+        if (!m_toolSettingsDrawer->isVisible()) {
+            m_toolSettingsDrawer->hide();
+        } else {
+            const QRect startRect = m_toolSettingsDrawer->geometry();
+            const QRect endRect(drawerHiddenX, startRect.y(), drawerW, drawerH);
+            const QRect buttonStartRect = m_toolSettingsButton->geometry();
+            const QRect buttonEndRect(buttonClosedX, buttonY, m_toolSettingsButton->width(), m_toolSettingsButton->height());
+            m_toolSettingsDrawer->setProperty("closing", true);
+            m_toolSettingsDrawer->raise();
+            m_toolSettingsButton->raise();
+            if (m_toolSettingsAnimation) {
+                m_toolSettingsAnimation->setStartValue(startRect);
+                m_toolSettingsAnimation->setEndValue(endRect);
+                m_toolSettingsAnimation->start();
+            } else {
+                m_toolSettingsDrawer->setGeometry(endRect);
+                m_toolSettingsDrawer->hide();
+                m_toolSettingsDrawer->setProperty("closing", false);
+            }
+            if (m_toolSettingsButtonAnimation) {
+                m_toolSettingsButtonAnimation->setStartValue(buttonStartRect);
+                m_toolSettingsButtonAnimation->setEndValue(buttonEndRect);
+                m_toolSettingsButtonAnimation->start();
+            } else {
+                m_toolSettingsButton->setGeometry(buttonEndRect);
+            }
+        }
+    }
+}
+
+bool CaptureOverlay::isToolSettingsUiAt(const QPoint &pos) const
+{
+    if (m_toolSettingsButton && m_toolSettingsButton->isVisible() &&
+        m_toolSettingsButton->geometry().contains(pos))
+        return true;
+    if (m_toolSettingsDrawer && m_toolSettingsDrawer->isVisible() &&
+        !m_toolSettingsDrawer->property("closing").toBool() &&
+        m_toolSettingsDrawer->geometry().contains(pos))
+        return true;
+    return false;
+}
 
 void CaptureOverlay::refreshUI()
 {
@@ -250,6 +1168,7 @@ void CaptureOverlay::startCapture()
     m_eyedropperActive = false;
 
     if (m_textEdit) m_textEdit->hide();
+    if (m_textEditPanel) m_textEditPanel->hide();
     m_textJustCommitted = false;
     if (m_annotationEngine) m_annotationEngine->clear();
     hideToolbar();
@@ -262,6 +1181,11 @@ void CaptureOverlay::startCapture()
     if (m_toolbar) {
         m_toolbar->refreshTools();
         m_toolbar->setSelectionLocked(false);
+        m_toolbar->selectTool(AnnotationEngine::None);
+    }
+    if (m_annotationEngine) {
+        m_annotationEngine->setCurrentTool(AnnotationEngine::None);
+        m_annotationEngine->setSelectedIndex(-1);
     }
 
     m_overlayOpacity = s.value("overlayOpacity", 100).toInt();
@@ -273,6 +1197,9 @@ void CaptureOverlay::startCapture()
     int blurIntensity = s.value("blurIntensity", 16).toInt();
     if (m_annotationEngine) m_annotationEngine->setBlurIntensity(blurIntensity);
     if (m_toolbar) m_toolbar->setBlurIntensity(blurIntensity);
+    if (m_quickBlurSlider) m_quickBlurSlider->setValue(blurIntensity);
+    if (m_quickPenWidthSlider && m_annotationEngine) m_quickPenWidthSlider->setValue(m_annotationEngine->penWidth());
+    setToolSettingsDrawerVisible(false);
 
     int delayMs = s.value("captureDelay", 0).toInt();
     if (delayMs > 0)
@@ -408,6 +1335,18 @@ void CaptureOverlay::paintEvent(QPaintEvent *event)
         if (m_annotationEngine && m_selectionComplete) {
             painter.setClipRect(selRect);
             m_annotationEngine->render(&painter, selRect.topLeft());
+            if (m_annotationEngine->selectedIndex() >= 0) {
+                QRect annotationRect = m_annotationEngine->boundingRectOf(m_annotationEngine->selectedIndex())
+                                           .adjusted(-4, -4, 4, 4)
+                                           .translated(selRect.topLeft());
+                if (!annotationRect.isEmpty()) {
+                    QPen selectPen(QColor(255, 205, 70, 220), 1, Qt::DashLine);
+                    selectPen.setCosmetic(true);
+                    painter.setPen(selectPen);
+                    painter.setBrush(Qt::NoBrush);
+                    painter.drawRoundedRect(annotationRect.adjusted(0, 0, -1, -1), 3, 3);
+                }
+            }
             painter.setClipping(false);
         }
 
@@ -511,6 +1450,10 @@ void CaptureOverlay::paintEvent(QPaintEvent *event)
 void CaptureOverlay::mousePressEvent(QMouseEvent *event)
 {
     if (event->button() == Qt::LeftButton) {
+        if (isToolSettingsUiAt(event->pos())) {
+            event->accept();
+            return;
+        }
         if (m_toolbar && m_toolbar->isVisible() && m_toolbar->geometry().contains(event->pos()))
             return;
         if (m_actionPanel && m_actionPanel->isVisible() && m_actionPanel->geometry().contains(event->pos()))
@@ -537,11 +1480,12 @@ void CaptureOverlay::mousePressEvent(QMouseEvent *event)
             QRect selRect = normalizedSelectionRect();
 
             ResizeMode mode = getResizeMode(event->pos());
+            const bool selectionHandleHit = mode != ResNone && mode != ResMove && mode != ResNewSelection;
             
             bool isDrawingTool = (m_annotationEngine && m_annotationEngine->currentTool() != AnnotationEngine::None);
             
             // Annotation click while no tool is selected → move mode
-            if (mode == ResNone && m_annotationEngine && selRect.contains(event->pos())) {
+            if (!selectionHandleHit && m_annotationEngine && selRect.contains(event->pos())) {
                 QPoint rel = event->pos() - selRect.topLeft();
                 int idx = m_annotationEngine->findAnnotationAt(rel);
                 if (idx >= 0) {
@@ -589,6 +1533,18 @@ void CaptureOverlay::mousePressEvent(QMouseEvent *event)
         } else if (m_selectionComplete && m_selectionLocked) {
             // Selection locked — allow annotation drawing only
             QRect selRect = normalizedSelectionRect();
+            if (m_annotationEngine && selRect.contains(event->pos())) {
+                QPoint rel = event->pos() - selRect.topLeft();
+                int idx = m_annotationEngine->findAnnotationAt(rel);
+                if (idx >= 0) {
+                    m_isDraggingAnnotation = true;
+                    m_dragAnnotationStart = rel;
+                    m_annotationEngine->setSelectedIndex(idx);
+                    setCursor(Qt::SizeAllCursor);
+                    update();
+                    return;
+                }
+            }
             bool isDrawingTool = (m_annotationEngine && m_annotationEngine->currentTool() != AnnotationEngine::None);
             if (isDrawingTool && selRect.contains(event->pos())) {
                 m_annotationEngine->beginDraw(event->pos() - selRect.topLeft());
@@ -631,6 +1587,8 @@ void CaptureOverlay::mouseDoubleClickEvent(QMouseEvent *event)
     if (m_toolbar && m_toolbar->isVisible() && m_toolbar->geometry().contains(event->pos()))
         return;
     if (m_actionPanel && m_actionPanel->isVisible() && m_actionPanel->geometry().contains(event->pos()))
+        return;
+    if (isToolSettingsUiAt(event->pos()))
         return;
 
     selectMonitorAt(event->pos());
@@ -782,23 +1740,7 @@ void CaptureOverlay::mouseReleaseEvent(QMouseEvent *event)
                 updateUndoRedoState();
             } else if (m_annotationEngine && m_annotationEngine->currentTool() == AnnotationEngine::Text) {
                 if (selRect.contains(event->pos())) {
-                    m_textEditPosition = event->pos();
-                    QFont textFont(m_annotationEngine->textFontFamily(), m_annotationEngine->textFontSize());
-                    textFont.setBold(true);
-                    m_textEdit->setFont(textFont);
-                    m_textEdit->setStyleSheet(QString(R"(
-                        QTextEdit {
-                            background-color: rgba(0, 0, 0, 180);
-                            color: %1;
-                            border: 2px solid #0078D4;
-                            border-radius: 4px;
-                            padding: 4px 8px;
-                        }
-                    )").arg(m_annotationEngine->color().name()));
-                    m_textEdit->setGeometry(event->pos().x(), event->pos().y(), 200, 30);
-                    m_textEdit->clear();
-                    m_textEdit->show();
-                    m_textEdit->setFocus();
+                    beginTextEditAt(event->pos());
                 }
             } else if (m_annotationEngine && m_annotationEngine->currentTool() == AnnotationEngine::Counter) {
                 if (selRect.contains(event->pos())) {
@@ -831,7 +1773,7 @@ void CaptureOverlay::keyPressEvent(QKeyEvent *event)
     }
     // If text edit is open, just close it
         if (m_textEdit && m_textEdit->isVisible()) {
-            m_textEdit->hide();
+            cancelTextEdit();
             m_textJustCommitted = false;
             setFocus();
             return;
@@ -848,13 +1790,13 @@ void CaptureOverlay::keyPressEvent(QKeyEvent *event)
         } else {
             onClose();
         }
-    } else if (event->matches(QKeySequence::Copy)) {
+    } else if (matchesOverlayShortcut(event, QStringLiteral("actionCopy"), QStringLiteral("Ctrl+C"))) {
         onCopyToClipboard();
-    } else if (event->matches(QKeySequence::Save)) {
+    } else if (matchesOverlayShortcut(event, QStringLiteral("actionSave"), QStringLiteral("Ctrl+S"))) {
         onSave();
-    } else if (event->matches(QKeySequence::Undo)) {
+    } else if (matchesOverlayShortcut(event, QStringLiteral("actionUndo"), QStringLiteral("Ctrl+Z"))) {
         if (m_annotationEngine) { m_annotationEngine->undo(); update(); updateUndoRedoState(); }
-    } else if (event->matches(QKeySequence::Redo)) {
+    } else if (matchesOverlayShortcut(event, QStringLiteral("actionRedo"), QStringLiteral("Ctrl+Shift+Z"))) {
         if (m_annotationEngine) { m_annotationEngine->redo(); update(); updateUndoRedoState(); }
     } else if (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter) {
         // If text edit is open and Shift is held, insert newline
@@ -873,32 +1815,25 @@ void CaptureOverlay::keyPressEvent(QKeyEvent *event)
         }
         if (m_selectionComplete) onCopyToClipboard();
     } else if (m_selectionComplete && m_annotationEngine) {
-        // Eyedropper shortcut
-        if (event->key() == Qt::Key_I && !(event->modifiers() & (Qt::ControlModifier | Qt::AltModifier))) {
-            onEyedropperRequested();
-            return;
-        }
-        // Tool shortcut keys
-        int toolId = AnnotationEngine::None;
-        switch (event->key()) {
-            case Qt::Key_P: toolId = AnnotationEngine::Pen; break;
-            case Qt::Key_A: toolId = AnnotationEngine::Arrow; break;
-            case Qt::Key_R: toolId = AnnotationEngine::Rectangle; break;
-            case Qt::Key_C: toolId = AnnotationEngine::Circle; break;
-            case Qt::Key_T: toolId = AnnotationEngine::Text; break;
-            case Qt::Key_H: toolId = AnnotationEngine::Highlighter; break;
-            case Qt::Key_B: toolId = AnnotationEngine::Blur; break;
-            case Qt::Key_NumberSign: toolId = AnnotationEngine::Counter; break;
-            case Qt::Key_X: toolId = AnnotationEngine::Eraser; break;
-            case Qt::Key_L: toolId = AnnotationEngine::Line; break;
-            case Qt::Key_D: toolId = AnnotationEngine::SemiRect; break;
-            default: break;
-        }
-        if (toolId != AnnotationEngine::None) {
-            m_annotationEngine->setCurrentTool(static_cast<AnnotationEngine::Tool>(toolId));
-            // Update selection in toolbar
-            if (m_toolbar) m_toolbar->selectTool(toolId);
-        }
+        if (matchesOverlayShortcut(event, QStringLiteral("actionEyedropper"), QStringLiteral("I"))) { onEyedropperRequested(); return; }
+        if (matchesOverlayShortcut(event, QStringLiteral("actionLock"), QStringLiteral("K"))) { onSelectionLockToggled(!m_selectionLocked); return; }
+        if (matchesOverlayShortcut(event, QStringLiteral("actionPin"), QStringLiteral("Ctrl+P"))) { onPinToDesktop(); return; }
+        if (matchesOverlayShortcut(event, QStringLiteral("actionOcr"), QStringLiteral("Ctrl+O"))) { onOcrRequested(); return; }
+        if (matchesOverlayShortcut(event, QStringLiteral("actionUpload"), QStringLiteral("Ctrl+U"))) { onUploadRequested(); return; }
+        if (matchesOverlayShortcut(event, QStringLiteral("actionGif"), QStringLiteral("Ctrl+G"))) { onGifRequested(); return; }
+        if (matchesOverlayShortcut(event, QStringLiteral("actionVideo"), QStringLiteral("Ctrl+Shift+V"))) { onVideoRequested(); return; }
+
+        if (matchesOverlayShortcut(event, QStringLiteral("toolPen"), QStringLiteral("P"))) selectAnnotationTool(AnnotationEngine::Pen);
+        else if (matchesOverlayShortcut(event, QStringLiteral("toolArrow"), QStringLiteral("A"))) selectAnnotationTool(AnnotationEngine::Arrow);
+        else if (matchesOverlayShortcut(event, QStringLiteral("toolLine"), QStringLiteral("L"))) selectAnnotationTool(AnnotationEngine::Line);
+        else if (matchesOverlayShortcut(event, QStringLiteral("toolRectangle"), QStringLiteral("R"))) selectAnnotationTool(AnnotationEngine::Rectangle);
+        else if (matchesOverlayShortcut(event, QStringLiteral("toolCircle"), QStringLiteral("C"))) selectAnnotationTool(AnnotationEngine::Circle);
+        else if (matchesOverlayShortcut(event, QStringLiteral("toolText"), QStringLiteral("T"))) selectAnnotationTool(AnnotationEngine::Text);
+        else if (matchesOverlayShortcut(event, QStringLiteral("toolHighlighter"), QStringLiteral("H"))) selectAnnotationTool(AnnotationEngine::Highlighter);
+        else if (matchesOverlayShortcut(event, QStringLiteral("toolSemiRect"), QStringLiteral("D"))) selectAnnotationTool(AnnotationEngine::SemiRect);
+        else if (matchesOverlayShortcut(event, QStringLiteral("toolBlur"), QStringLiteral("B"))) selectAnnotationTool(AnnotationEngine::Blur);
+        else if (matchesOverlayShortcut(event, QStringLiteral("toolCounter"), QStringLiteral("N"))) selectAnnotationTool(AnnotationEngine::Counter);
+        else if (matchesOverlayShortcut(event, QStringLiteral("toolEraser"), QStringLiteral("X"))) selectAnnotationTool(AnnotationEngine::Eraser);
     }
 }
 
@@ -911,6 +1846,24 @@ void CaptureOverlay::keyReleaseEvent(QKeyEvent *event)
 
 bool CaptureOverlay::eventFilter(QObject *obj, QEvent *event)
 {
+    if ((obj == m_textMoveHandle || obj == m_textEditPanel) && m_textEdit && m_textEdit->isVisible()) {
+        if (event->type() == QEvent::MouseButtonPress) {
+            QMouseEvent *me = static_cast<QMouseEvent*>(event);
+            if (me->button() == Qt::LeftButton) {
+                m_textPanelDragging = true;
+                m_textPanelDragOffset = mapFromGlobal(me->globalPosition().toPoint()) - m_textEdit->pos();
+                return true;
+            }
+        } else if (event->type() == QEvent::MouseMove && m_textPanelDragging) {
+            QMouseEvent *me = static_cast<QMouseEvent*>(event);
+            moveTextEditorTo(mapFromGlobal(me->globalPosition().toPoint()) - m_textPanelDragOffset);
+            return true;
+        } else if (event->type() == QEvent::MouseButtonRelease && m_textPanelDragging) {
+            m_textPanelDragging = false;
+            return true;
+        }
+    }
+
     if (obj == m_textEdit && event->type() == QEvent::KeyPress) {
         QKeyEvent *ke = static_cast<QKeyEvent*>(event);
         if (ke->key() == Qt::Key_Return || ke->key() == Qt::Key_Enter) {
@@ -1086,12 +2039,17 @@ void CaptureOverlay::showToolbar()
         m_actionPanel->show();
         m_actionPanel->raise();
     }
+
+    updateToolSettingsDrawerPosition();
 }
 
 void CaptureOverlay::hideToolbar()
 {
     if (m_toolbar) m_toolbar->hide();
     if (m_actionPanel) m_actionPanel->hide();
+    if (m_toolSettingsButton) m_toolSettingsButton->hide();
+    if (m_toolSettingsDrawer) m_toolSettingsDrawer->hide();
+    if (m_textEditPanel) m_textEditPanel->hide();
 }
 
 void CaptureOverlay::finishCapture()
@@ -1101,6 +2059,8 @@ void CaptureOverlay::finishCapture()
     hide();
     m_selectionComplete = false;
     m_isSelecting = false;
+    hideToolbar();
+    cancelTextEdit();
 
     if (m_captureMode == ModeRecording) {
         m_captureMode = ModeNormal;
@@ -1126,7 +2086,94 @@ void CaptureOverlay::cancelCapture()
     hide();
     m_selectionComplete = false;
     m_isSelecting = false;
+    hideToolbar();
+    cancelTextEdit();
     emit captureCancelled();
+}
+
+void CaptureOverlay::beginTextEditAt(const QPoint &pos)
+{
+    if (!m_textEdit || !m_annotationEngine)
+        return;
+
+    {
+        QSignalBlocker fontBlocker(m_textInlineFontCombo);
+        QSignalBlocker sizeBlocker(m_textInlineSizeSpin);
+        if (m_textInlineFontCombo)
+            m_textInlineFontCombo->setCurrentFont(QFont(m_annotationEngine->textFontFamily()));
+        if (m_textInlineSizeSpin)
+            m_textInlineSizeSpin->setValue(m_annotationEngine->textFontSize());
+    }
+
+    m_textEdit->clear();
+    m_textEdit->setFixedHeight(30);
+    updateTextEditorStyle();
+    moveTextEditorTo(pos);
+    m_textEdit->show();
+    if (m_textEditPanel)
+        m_textEditPanel->show();
+    updateTextEditPanelPosition();
+    m_textEdit->setFocus();
+}
+
+void CaptureOverlay::moveTextEditorTo(const QPoint &pos)
+{
+    if (!m_textEdit)
+        return;
+
+    QRect selRect = normalizedSelectionRect();
+    const int editWidth = qBound(80, selRect.width() - 8, 260);
+    const int editHeight = qMax(30, m_textEdit->height());
+    const int minX = selRect.left() + 4;
+    const int maxX = qMax(minX, selRect.right() - editWidth - 4);
+    const int minY = selRect.top() + 4;
+    const int maxY = qMax(minY, selRect.bottom() - editHeight - 4);
+    int x = qBound(minX, pos.x(), maxX);
+    int y = qBound(minY, pos.y(), maxY);
+    m_textEditPosition = QPoint(x, y);
+    m_textEdit->setGeometry(x, y, editWidth, editHeight);
+    updateTextEditPanelPosition();
+}
+
+void CaptureOverlay::updateTextEditorStyle()
+{
+    if (!m_textEdit || !m_annotationEngine)
+        return;
+
+    QFont textFont(m_annotationEngine->textFontFamily(), m_annotationEngine->textFontSize());
+    textFont.setBold(true);
+    m_textEdit->setFont(textFont);
+    m_textEdit->setStyleSheet(QString(R"(
+        QTextEdit {
+            background-color: rgba(0, 0, 0, 180);
+            color: %1;
+            border: 2px solid #0078D4;
+            border-radius: 4px;
+            padding: 4px 8px;
+        }
+    )").arg(m_annotationEngine->color().name()));
+}
+
+void CaptureOverlay::updateTextEditPanelPosition()
+{
+    if (!m_textEditPanel || !m_textEdit || !m_textEdit->isVisible())
+        return;
+
+    m_textEditPanel->adjustSize();
+    QRect selRect = normalizedSelectionRect();
+    int x = m_textEdit->x();
+    int y = m_textEdit->y() - m_textEditPanel->height() - 6;
+    if (y < selRect.top() + 4)
+        y = m_textEdit->geometry().bottom() + 6;
+    if (x + m_textEditPanel->width() > selRect.right() - 4)
+        x = selRect.right() - m_textEditPanel->width() - 4;
+    if (x < selRect.left() + 4)
+        x = selRect.left() + 4;
+    if (y + m_textEditPanel->height() > selRect.bottom() - 4)
+        y = qMax(selRect.top() + 4, m_textEdit->y() - m_textEditPanel->height() - 6);
+    m_textEditPanel->move(x, y);
+    m_textEditPanel->raise();
+    m_textEdit->raise();
 }
 
 void CaptureOverlay::commitText()
@@ -1135,12 +2182,14 @@ void CaptureOverlay::commitText()
     QString text = m_textEdit->toPlainText().trimmed();
     if (!text.isEmpty() && m_annotationEngine) {
         QRect selRect = normalizedSelectionRect();
+        m_textEditPosition = m_textEdit->pos();
         QPoint rel = m_textEditPosition - selRect.topLeft();
         m_annotationEngine->addTextAnnotation(rel, text);
         update();
         updateUndoRedoState();
     }
     m_textEdit->hide();
+    if (m_textEditPanel) m_textEditPanel->hide();
     m_textJustCommitted = true;
     setFocus();
 }
@@ -1148,6 +2197,7 @@ void CaptureOverlay::commitText()
 void CaptureOverlay::cancelTextEdit()
 {
     if (m_textEdit) m_textEdit->hide();
+    if (m_textEditPanel) m_textEditPanel->hide();
     setFocus();
 }
 
@@ -1157,6 +2207,31 @@ void CaptureOverlay::updateUndoRedoState()
         m_toolbar->setUndoEnabled(m_annotationEngine && m_annotationEngine->canUndo());
         m_toolbar->setRedoEnabled(m_annotationEngine && m_annotationEngine->canRedo());
     }
+}
+
+bool CaptureOverlay::matchesOverlayShortcut(QKeyEvent *event, const QString &key, const QString &fallback) const
+{
+    if (!event || event->key() == Qt::Key_unknown)
+        return false;
+    const Qt::KeyboardModifiers relevantMods =
+        event->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::ShiftModifier | Qt::MetaModifier);
+    QKeySequence pressed(static_cast<int>(relevantMods) | event->key());
+    QSettings s("EShot", "EShot");
+    const QString configured = s.value(QStringLiteral("overlayShortcut/%1").arg(key), fallback).toString().trimmed();
+    if (configured.isEmpty())
+        return false;
+    const QKeySequence target(configured);
+    return !target.isEmpty() && target.matches(pressed) == QKeySequence::ExactMatch;
+}
+
+void CaptureOverlay::selectAnnotationTool(int toolId)
+{
+    if (!m_annotationEngine)
+        return;
+    m_annotationEngine->setCurrentTool(static_cast<AnnotationEngine::Tool>(toolId));
+    m_annotationEngine->setSelectedIndex(-1);
+    if (m_toolbar)
+        m_toolbar->selectTool(toolId);
 }
 
 void CaptureOverlay::onClose() { cancelCapture(); }
@@ -1171,6 +2246,8 @@ void CaptureOverlay::onEyedropperRequested()
 void CaptureOverlay::onSelectionLockToggled(bool locked)
 {
     m_selectionLocked = locked;
+    if (m_toolbar)
+        m_toolbar->setSelectionLocked(locked);
 }
 
 void CaptureOverlay::onBlurIntensityChanged(int intensity)
@@ -1218,6 +2295,18 @@ void CaptureOverlay::onGifRequested()
     if (m_toolbar) m_toolbar->hide();
     if (m_actionPanel) m_actionPanel->hide();
     emit gifCaptureRequested(screenRect);
+}
+
+void CaptureOverlay::onVideoRequested()
+{
+    QRect selRect = normalizedSelectionRect();
+    if (selRect.isEmpty()) return;
+    QRect screenRect = selRect.translated(m_virtualDesktopRect.topLeft());
+    hide();
+    m_selectionComplete = false;
+    m_isSelecting = false;
+    hideToolbar();
+    emit videoCaptureRequested(screenRect);
 }
 
 QRect CaptureOverlay::normalizedSelectionRect() const

@@ -20,7 +20,21 @@ QStringList defaultAnnotationTools()
 
 QStringList defaultToolbarControls()
 {
-    return {"Color","Eyedropper","Lock","Width","TextOptions","BlurIntensity","Undo","Redo","Ocr","Upload","Gif"};
+    return {"Color","Eyedropper","Lock","BlurIntensity","Undo","Redo","Ocr","Upload","Gif","Video"};
+}
+
+QStringList normalizedToolbarControls(QSettings &settings)
+{
+    const QStringList defaults = defaultToolbarControls();
+    QStringList controls = settings.value("visibleToolbarControls", defaults).toStringList();
+    if (settings.contains("visibleToolbarControls") &&
+        !settings.value("toolbarControlsMigratedVideo", false).toBool()) {
+        if (!controls.contains(QStringLiteral("Video")))
+            controls.append(QStringLiteral("Video"));
+        settings.setValue("toolbarControlsMigratedVideo", true);
+        settings.setValue("visibleToolbarControls", controls);
+    }
+    return controls;
 }
 }
 
@@ -57,7 +71,7 @@ AnnotationToolbar::AnnotationToolbar(QWidget *parent)
 
     QSettings s("EShot", "EShot");
     m_visibleTools = s.value("visibleTools", defaultAnnotationTools()).toStringList();
-    m_visibleControls = s.value("visibleToolbarControls", defaultToolbarControls()).toStringList();
+    m_visibleControls = normalizedToolbarControls(s);
 
     setupUI();
     applyStyles();
@@ -79,7 +93,7 @@ void AnnotationToolbar::refreshTools()
 {
     QSettings s("EShot", "EShot");
     m_visibleTools = s.value("visibleTools", defaultAnnotationTools()).toStringList();
-    m_visibleControls = s.value("visibleToolbarControls", defaultToolbarControls()).toStringList();
+    m_visibleControls = normalizedToolbarControls(s);
 
     setMinimumWidth(0);
     setMaximumWidth(QWIDGETSIZE_MAX);
@@ -122,8 +136,7 @@ void AnnotationToolbar::updateDynamicOptionVisibility()
             m_currentToolId == AnnotationEngine::Blur && isControlVisible("BlurIntensity"));
     }
     if (m_textOptionsWidget) {
-        m_textOptionsWidget->setVisible(
-            m_currentToolId == AnnotationEngine::Text && isControlVisible("TextOptions"));
+        m_textOptionsWidget->setVisible(false);
     }
 }
 
@@ -228,9 +241,9 @@ QWidget* AnnotationToolbar::createSeparator()
 {
     QFrame *sep = new QFrame(this);
     sep->setFrameShape(QFrame::VLine);
-    sep->setFixedWidth(1);
+    sep->setFixedWidth(13);
     sep->setFixedHeight(26);
-    sep->setStyleSheet("background-color: #505050;");
+    sep->setStyleSheet("color: #505050; margin-left: 6px; margin-right: 6px;");
     return sep;
 }
 
@@ -248,7 +261,7 @@ void AnnotationToolbar::setupUI()
     m_layout->addWidget(createToolButton(":/icons/circle.svg", TranslationManager::toolCircle(), AnnotationEngine::Circle, "Circle"));
     m_layout->addWidget(createToolButton(":/icons/text.svg", TranslationManager::toolText(), AnnotationEngine::Text, "Text"));
     m_layout->addWidget(createToolButton(":/icons/highlighter.svg", TranslationManager::toolHighlighter(), AnnotationEngine::Highlighter, "Highlighter"));
-    m_layout->addWidget(createToolButton(":/icons/semirect.svg", TranslationManager::toolSemiRect(), AnnotationEngine::SemiRect, "SemiRect"));
+    m_layout->addWidget(createToolButton(":/icons/semirect.svg", TranslationManager::toolSemiRect() + QStringLiteral(" (D)"), AnnotationEngine::SemiRect, "SemiRect"));
     m_layout->addWidget(createToolButton(":/icons/blur.svg", TranslationManager::toolBlur(), AnnotationEngine::Blur, "Blur"));
     m_layout->addWidget(createToolButton(":/icons/counter.svg", TranslationManager::toolCounter(), AnnotationEngine::Counter, "Counter"));
     m_layout->addWidget(createToolButton(":/icons/eraser.svg", TranslationManager::toolEraser(), AnnotationEngine::Eraser, "Eraser"));
@@ -317,34 +330,7 @@ void AnnotationToolbar::setupUI()
     m_optionalControls["Lock"] = m_lockButton;
     m_layout->addWidget(m_lockButton);
 
-    m_layout->addWidget(createSeparator());
-
-    // Pen width slider
-    m_widthSlider = new QSlider(Qt::Horizontal, this);
-    m_widthSlider->setRange(1, 20);
-    m_widthSlider->setValue(3);
-    m_widthSlider->setFixedWidth(80);
-    m_widthSlider->setToolTip(TranslationManager::toolWidth());
-    m_widthSlider->setStyleSheet(R"(
-        QSlider::groove:horizontal {
-            background: #404040;
-            height: 4px;
-            border-radius: 2px;
-        }
-        QSlider::handle:horizontal {
-            background: #0078D4;
-            width: 14px;
-            height: 14px;
-            margin: -5px 0;
-            border-radius: 7px;
-        }
-        QSlider::handle:horizontal:hover {
-            background: #1a8cff;
-        }
-    )");
-    connect(m_widthSlider, &QSlider::valueChanged, this, &AnnotationToolbar::onWidthSliderChanged);
-    m_optionalControls["Width"] = m_widthSlider;
-    m_layout->addWidget(m_widthSlider);
+    m_widthSlider = nullptr;
 
     // Text font controls (hidden by default)
     m_textOptionsWidget = new QWidget(this);
@@ -412,7 +398,7 @@ void AnnotationToolbar::setupUI()
 
     // Undo / Redo
     m_undoButton = createActionButton(":/icons/undo.svg", TranslationManager::toolUndo(), "undo");
-    m_redoButton = createActionButton(":/icons/redo.svg", TranslationManager::toolRedo(), "redo");
+    m_redoButton = createActionButton(":/icons/redo.svg", TranslationManager::toolRedo() + QStringLiteral(" (Ctrl+Shift+Z)"), "redo");
     m_optionalControls["Undo"] = m_undoButton;
     m_optionalControls["Redo"] = m_redoButton;
     m_layout->addWidget(m_undoButton);
@@ -468,8 +454,8 @@ void AnnotationToolbar::setupUI()
     m_layout->addWidget(m_uploadButton);
 
     m_gifButton = new QPushButton(this);
-    m_gifButton->setIcon(QIcon(":/icons/record.svg"));
-    m_gifButton->setIconSize(QSize(18, 18));
+    m_gifButton->setIcon(QIcon(":/icons/gif.svg"));
+    m_gifButton->setIconSize(QSize(22, 22));
     m_gifButton->setFixedSize(34, 34);
     m_gifButton->setToolTip(TranslationManager::recordingStartTitle());
     m_gifButton->setCursor(Qt::PointingHandCursor);
@@ -489,6 +475,29 @@ void AnnotationToolbar::setupUI()
     m_actionButtons["gif"] = m_gifButton;
     m_optionalControls["Gif"] = m_gifButton;
     m_layout->addWidget(m_gifButton);
+
+    m_videoButton = new QPushButton(this);
+    m_videoButton->setIcon(QIcon(":/icons/video.svg"));
+    m_videoButton->setIconSize(QSize(24, 24));
+    m_videoButton->setFixedSize(34, 34);
+    m_videoButton->setToolTip(TranslationManager::videoRecordingTitle());
+    m_videoButton->setCursor(Qt::PointingHandCursor);
+    m_videoButton->setProperty("action", "video");
+    m_videoButton->setStyleSheet(R"(
+        QPushButton {
+            background-color: #3a3a3a;
+            border: 1px solid #505050;
+            border-radius: 8px;
+        }
+        QPushButton:hover {
+            background-color: #4a4a4a;
+            border-color: #606060;
+        }
+    )");
+    connect(m_videoButton, &QPushButton::clicked, this, &AnnotationToolbar::onActionButtonClicked);
+    m_actionButtons["video"] = m_videoButton;
+    m_optionalControls["Video"] = m_videoButton;
+    m_layout->addWidget(m_videoButton);
 
     refreshTools();
     adjustSize();
@@ -640,6 +649,7 @@ void AnnotationToolbar::onActionButtonClicked()
     else if (action == "ocr") emit ocrRequested();
     else if (action == "upload") emit uploadRequested();
     else if (action == "gif") emit gifRequested();
+    else if (action == "video") emit videoRequested();
 }
 
 void AnnotationToolbar::onColorButtonClicked()
@@ -697,7 +707,7 @@ void AnnotationToolbar::refreshToolTips()
             case AnnotationEngine::Arrow:      it.value()->setToolTip(TranslationManager::toolArrow()); break;
             case AnnotationEngine::Line:       it.value()->setToolTip(TranslationManager::toolLine()); break;
             case AnnotationEngine::Rectangle:  it.value()->setToolTip(TranslationManager::toolRect()); break;
-            case AnnotationEngine::SemiRect:   it.value()->setToolTip(TranslationManager::toolSemiRect()); break;
+            case AnnotationEngine::SemiRect:   it.value()->setToolTip(TranslationManager::toolSemiRect() + QStringLiteral(" (D)")); break;
             case AnnotationEngine::Circle:     it.value()->setToolTip(TranslationManager::toolCircle()); break;
             case AnnotationEngine::Text:       it.value()->setToolTip(TranslationManager::toolText()); break;
             case AnnotationEngine::Highlighter:it.value()->setToolTip(TranslationManager::toolHighlighter()); break;
@@ -707,11 +717,12 @@ void AnnotationToolbar::refreshToolTips()
         }
     }
     if (m_actionButtons.contains("undo")) m_actionButtons["undo"]->setToolTip(TranslationManager::toolUndo());
-    if (m_actionButtons.contains("redo")) m_actionButtons["redo"]->setToolTip(TranslationManager::toolRedo());
+    if (m_actionButtons.contains("redo")) m_actionButtons["redo"]->setToolTip(TranslationManager::toolRedo() + QStringLiteral(" (Ctrl+Shift+Z)"));
     if (m_colorButton) m_colorButton->setToolTip(TranslationManager::toolColor());
     if (m_eyedropperButton) m_eyedropperButton->setToolTip(TranslationManager::toolEyedropper());
     if (m_lockButton) m_lockButton->setToolTip(TranslationManager::actionLock());
     if (m_ocrButton) m_ocrButton->setToolTip(TranslationManager::actionOcr());
     if (m_uploadButton) m_uploadButton->setToolTip(TranslationManager::uploadToService());
     if (m_gifButton) m_gifButton->setToolTip(TranslationManager::recordingStartTitle());
+    if (m_videoButton) m_videoButton->setToolTip(TranslationManager::videoRecordingTitle());
 }

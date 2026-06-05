@@ -93,6 +93,10 @@ public:
     static QString generalOptions()   { return tr("generalOptions"); }
     static QString autoStart()        { return tr("autoStart"); }
     static QString showNotifications(){ return tr("showNotifications"); }
+    static QString notifyCopy()       { return tr("notifyCopy"); }
+    static QString notifySave()       { return tr("notifySave"); }
+    static QString notifyGif()        { return tr("notifyGif"); }
+    static QString notifyVideo()      { return tr("notifyVideo"); }
     static QString playSound()        { return tr("playSound"); }
     static QString copyPathAfterSave(){ return tr("copyPathAfterSave"); }
 
@@ -281,6 +285,7 @@ public:
     // ─── Kayıt (Recording) ───
     static QString recordingStart()   { return tr("recordingStart"); }
     static QString recordingStop()    { return tr("recordingStop"); }
+    static QString recordingPauseResume() { return tr("recordingPauseResume"); }
     static QString recordingStartTitle() { return tr("recordingStartTitle"); }
     static QString recordingStartDesc() { return tr("recordingStartDesc"); }
     static QString recordingInProgress() { return tr("recordingInProgress"); }
@@ -292,6 +297,31 @@ public:
     static QString recordingTimeLimitReached() { return tr("recordingTimeLimitReached"); }
     static QString recordingMaxTime() { return tr("recordingMaxTime"); }
     static QString recordingFpsLabel() { return tr("recordingFpsLabel"); }
+    static QString quickSettings() { return tr("quickSettings"); }
+    static QString quickPenWidth() { return tr("quickPenWidth"); }
+    static QString quickBlurIntensity() { return tr("quickBlurIntensity"); }
+    static QString quickGifRecording() { return tr("quickGifRecording"); }
+    static QString quickMaxSeconds() { return tr("quickMaxSeconds"); }
+    static QString quickVideoComingSoon() { return tr("quickVideoComingSoon"); }
+    static QString videoRecordingTitle() { return tr("videoRecordingTitle"); }
+    static QString videoSaved() { return tr("videoSaved"); }
+    static QString videoFailed() { return tr("videoFailed"); }
+    static QString videoFfmpegMissing() { return tr("videoFfmpegMissing"); }
+    static QString videoQuality() { return tr("videoQuality"); }
+    static QString gifSettings() { return tr("gifSettings"); }
+    static QString recordingCancel() { return tr("recordingCancel"); }
+    static QString videoQualityCrf() { return tr("videoQualityCrf"); }
+    static QString videoCrfHint() { return tr("videoCrfHint"); }
+    static QString videoBitrate() { return tr("videoBitrate"); }
+    static QString audioMode() { return tr("audioMode"); }
+    static QString audioNone() { return tr("audioNone"); }
+    static QString audioDesktop() { return tr("audioDesktop"); }
+    static QString audioMicrophone() { return tr("audioMicrophone"); }
+    static QString audioDesktopMic() { return tr("audioDesktopMic"); }
+    static QString audioSource() { return tr("audioSource"); }
+    static QString audioMicrophoneDevice() { return tr("audioMicrophoneDevice"); }
+    static QString audioNoDevice() { return tr("audioNoDevice"); }
+    static QString audioSystemLoopback() { return tr("audioSystemLoopback"); }
 
     // ─── Kaydırmalı Yakalama ───
     static QString scrollSelectArea() { return tr("scrollSelectArea"); }
@@ -349,6 +379,10 @@ private:
         {"generalOptions", {"Genel Seçenekler", "General Options", "Allgemeine Optionen", "Options générales", "Opciones generales", "一般オプション", "常规选项", "Общие параметры"}},
         {"autoStart",      {"Windows ile başlat", "Start with Windows", "Mit Windows starten", "Démarrer avec Windows", "Iniciar con Windows", "Windowsと同時に開始", "随Windows启动", "Запускать с Windows"}},
         {"showNotifications",{"Bildirim göster", "Show notifications", "Benachrichtigungen", "Notifications", "Notificaciones", "通知を表示", "显示通知", "Показывать уведомления"}},
+        {"notifyCopy",{"Görsel kopyalama", "Image copy", "Bild kopieren", "Copie d'image", "Copiar imagen", "画像コピー", "图片复制", "Копирование изображения"}},
+        {"notifySave",{"Görsel kayıt", "Image save", "Bild speichern", "Enregistrement d'image", "Guardar imagen", "画像保存", "图片保存", "Сохранение изображения"}},
+        {"notifyGif",{"GIF kaydı", "GIF recording", "GIF-Aufnahme", "Enregistrement GIF", "Grabación GIF", "GIF録画", "GIF 录制", "Запись GIF"}},
+        {"notifyVideo",{"Video kaydı", "Video recording", "Videoaufnahme", "Enregistrement vidéo", "Grabación de video", "動画録画", "视频录制", "Запись видео"}},
         {"playSound",      {"Ses çal", "Play sound", "Ton abspielen", "Jouer le son", "Reproducir sonido", "サウンド再生", "播放声音", "Звук"}},
         {"copyPathAfterSave",{"Kaydettikten sonra yolu kopyala", "Copy path after save", "Pfad nach Speichern kopieren", "Copier le chemin", "Copiar ruta después de guardar", "保存後にパスをコピー", "保存后复制路径", "Копировать путь после сохранения"}},
 
@@ -434,14 +468,14 @@ private:
         {"toolText",       {"Metin (T)", "Text (T)", "Text (T)", "Texte (T)", "Texto (T)", "テキスト (T)", "文本 (T)", "Текст (T)"}},
         {"toolHighlighter",{"Vurgulayıcı (H)", "Highlighter (H)", "Textmarker (H)", "Surligneur (H)", "Resaltador (H)", "マーカー (H)", "荧光笔 (H)", "Маркер (H)"}},
         {"toolBlur",       {"Bulanıklaştır (B)", "Blur (B)", "Unschärfe (B)", "Flou (B)", "Desenfocar (B)", "ぼかし (B)", "模糊 (B)", "Размытие (B)"}},
-        {"toolCounter",    {"Numara (#)", "Counter (#)", "Zähler (#)", "Compteur (#)", "Contador (#)", "カウンター (#)", "计数器 (#)", "Счётчик (#)"}},
+        {"toolCounter",    {"Numara (N)", "Counter (N)", "Zähler (N)", "Compteur (N)", "Contador (N)", "カウンター (N)", "计数器 (N)", "Счётчик (N)"}},
         {"toolEraser",     {"Silgi (X)", "Eraser (X)", "Radierer (X)", "Gomme (X)", "Borrador (X)", "消しゴム (X)", "橡皮 (X)", "Ластик (X)"}},
         {"toolLine",       {"Çizgi (L)", "Line (L)", "Linie (L)", "Ligne (L)", "Línea (L)", "線 (L)", "线条 (L)", "Линия (L)"}},
         {"toolColor",      {"Renk Seç", "Pick Color", "Farbe wählen", "Couleur", "Elegir color", "色を選択", "选择颜色", "Выбрать цвет"}},
         {"toolWidth",      {"Kalınlık", "Width", "Breite", "Épaisseur", "Grosor", "太さ", "粗细", "Толщина"}},
         {"toolUndo",       {"Geri Al (Ctrl+Z)", "Undo (Ctrl+Z)", "Rückgängig (Strg+Z)", "Annuler (Ctrl+Z)", "Deshacer (Ctrl+Z)", "元に戻す (Ctrl+Z)", "撤销 (Ctrl+Z)", "Отменить (Ctrl+Z)"}},
         {"toolRedo",       {"İleri Al (Ctrl+Y)", "Redo (Ctrl+Y)", "Wiederholen (Strg+Y)", "Rétablir (Ctrl+Y)", "Rehacer (Ctrl+Y)", "やり直し (Ctrl+Y)", "重做 (Ctrl+Y)", "Повторить (Ctrl+Y)"}},
-        {"actionPin",      {"Ekrana Sabitle 📌", "Pin to Screen 📌", "Heften 📌", "Épingler 📌", "Fijar 📌", "ピン留め 📌", "固定 📌", "Закрепить 📌"}},
+        {"actionPin",      {"Ekrana Sabitle", "Pin to Screen", "Heften", "Épingler", "Fijar", "ピン留め", "固定", "Закрепить"}},
         {"actionCopy",     {"Kopyala (Ctrl+C)", "Copy (Ctrl+C)", "Kopieren (Strg+C)", "Copier (Ctrl+C)", "Copiar (Ctrl+C)", "コピー (Ctrl+C)", "复制 (Ctrl+C)", "Копировать (Ctrl+C)"}},
         {"actionSave",     {"Kaydet (Ctrl+S)", "Save (Ctrl+S)", "Speichern (Strg+S)", "Enregistrer (Ctrl+S)", "Guardar (Ctrl+S)", "保存 (Ctrl+S)", "保存 (Ctrl+S)", "Сохранить (Ctrl+S)"}},
         {"actionClose",    {"Kapat (Esc)", "Close (Esc)", "Schließen (Esc)", "Fermer (Esc)", "Cerrar (Esc)", "閉じる (Esc)", "关闭 (Esc)", "Закрыть (Esc)"}},
@@ -537,6 +571,7 @@ private:
         // ─── Kayıt (Recording) ───
         {"recordingStart", {"Kaydı Başlat", "Start Recording", "Aufnahme starten", "Démarrer l'enregistrement", "Iniciar grabación", "録画開始", "开始录制", "Начать запись"}},
         {"recordingStop",  {"Kaydı Durdur", "Stop Recording", "Aufnahme stoppen", "Arrêter l'enregistrement", "Detener grabación", "録画停止", "停止录制", "Остановить запись"}},
+        {"recordingPauseResume",{"Duraklat / Sürdür", "Pause / Resume", "Pausieren / Fortsetzen", "Pause / Reprendre", "Pausar / Reanudar", "一時停止 / 再開", "暂停 / 继续", "Пауза / Продолжить"}},
         {"recordingStartTitle",{"GIF Kaydı", "GIF Recording", "GIF-Aufnahme", "Enregistrement GIF", "Grabación GIF", "GIF録画", "GIF 录制", "Запись GIF"}},
         {"recordingStartDesc",{"Kaydedilecek alanı seçin ve başlatın", "Select area to record and start", "Bereich wählen und starten", "Sélectionnez la zone et démarrez", "Seleccione el área e inicie", "録画する範囲を選択", "选择录制区域并开始", "Выберите область и начните"}},
         {"recordingInProgress",{"Kayıt devam ediyor...", "Recording in progress...", "Aufnahme läuft...", "Enregistrement en cours...", "Grabación en curso...", "録画中...", "录制中...", "Идёт запись..."}},
@@ -548,6 +583,31 @@ private:
         {"recordingTimeLimitReached",{"Süre limiti doldu", "Time limit reached", "Zeitlimit erreicht", "Limite de temps atteinte", "Límite de tiempo alcanzado", "時間制限に達しました", "已达时长限制", "Достигнут лимит времени"}},
         {"recordingMaxTime",{"Maks. süre (sn):", "Max time (sec):", "Max. Zeit (Sek.):", "Temps max (sec) :", "Tiempo máx. (seg):", "最大時間 (秒):", "最大时长 (秒):", "Макс. время (сек):"}},
         {"recordingFpsLabel",{"FPS:", "FPS:", "FPS:", "FPS :", "FPS:", "FPS:", "FPS:", "FPS:"}},
+        {"quickSettings",{"Hızlı Ayarlar", "Quick Settings", "Schnelleinstellungen", "Réglages rapides", "Ajustes rápidos", "クイック設定", "快速设置", "Быстрые настройки"}},
+        {"quickPenWidth",{"Kalem / şekil kalınlığı", "Pen / shape width", "Stift-/Formbreite", "Épaisseur stylo/forme", "Grosor de lápiz/forma", "ペン/図形の太さ", "画笔/形状粗细", "Толщина пера/фигуры"}},
+        {"quickBlurIntensity",{"Bulanıklık şiddeti", "Blur intensity", "Unschärfeintensität", "Intensité du flou", "Intensidad de desenfoque", "ぼかし強度", "模糊强度", "Сила размытия"}},
+        {"quickGifRecording",{"GIF kaydı", "GIF recording", "GIF-Aufnahme", "Enregistrement GIF", "Grabación GIF", "GIF録画", "GIF 录制", "Запись GIF"}},
+        {"quickMaxSeconds",{"Maks. saniye", "Max seconds", "Max. Sekunden", "Secondes max", "Segundos máx.", "最大秒数", "最大秒数", "Макс. секунд"}},
+        {"quickVideoComingSoon",{"Video ayarları: yakında", "Video settings: coming soon", "Videoeinstellungen: demnächst", "Réglages vidéo : bientôt", "Ajustes de video: pronto", "動画設定: 近日対応", "视频设置：即将支持", "Настройки видео: скоро"}},
+        {"videoRecordingTitle",{"Video kaydı", "Video recording", "Videoaufnahme", "Enregistrement vidéo", "Grabación de video", "動画録画", "视频录制", "Запись видео"}},
+        {"videoSaved",{"Video kaydedildi:", "Video saved:", "Video gespeichert:", "Vidéo enregistrée :", "Video guardado:", "動画保存:", "视频已保存:", "Видео сохранено:"}},
+        {"videoFailed",{"Video kaydı başarısız oldu", "Video recording failed", "Videoaufnahme fehlgeschlagen", "Échec de l'enregistrement vidéo", "La grabación de video falló", "動画録画に失敗しました", "视频录制失败", "Ошибка записи видео"}},
+        {"videoFfmpegMissing",{"FFmpeg bulunamadı. ffmpeg.exe dosyasını uygulama klasöründeki ffmpeg klasörüne koyun.", "FFmpeg was not found. Put ffmpeg.exe in the app's ffmpeg folder.", "FFmpeg wurde nicht gefunden. Legen Sie ffmpeg.exe in den ffmpeg-Ordner der App.", "FFmpeg est introuvable. Placez ffmpeg.exe dans le dossier ffmpeg de l'application.", "No se encontró FFmpeg. Coloque ffmpeg.exe en la carpeta ffmpeg de la app.", "FFmpeg が見つかりません。ffmpeg.exe をアプリの ffmpeg フォルダーに入れてください。", "未找到 FFmpeg。请将 ffmpeg.exe 放入应用的 ffmpeg 文件夹。", "FFmpeg не найден. Поместите ffmpeg.exe в папку ffmpeg приложения."}},
+        {"videoQuality",{"Video kalitesi", "Video quality", "Videoqualität", "Qualité vidéo", "Calidad de video", "動画品質", "视频质量", "Качество видео"}},
+        {"gifSettings",{"GIF Ayarları", "GIF Settings", "GIF-Einstellungen", "Réglages GIF", "Ajustes GIF", "GIF設定", "GIF 设置", "Настройки GIF"}},
+        {"recordingCancel",{"İptal", "Cancel", "Abbrechen", "Annuler", "Cancelar", "キャンセル", "取消", "Отмена"}},
+        {"videoQualityCrf",{"Video kalitesi (CRF)", "Video quality (CRF)", "Videoqualität (CRF)", "Qualité vidéo (CRF)", "Calidad de video (CRF)", "動画品質 (CRF)", "视频质量 (CRF)", "Качество видео (CRF)"}},
+        {"videoCrfHint",{"Düşük değer daha yüksek kalite ve daha büyük dosya demektir. 24 dengeli varsayılandır.", "Lower values mean higher quality and larger files. 24 is the balanced default.", "Niedrigere Werte bedeuten höhere Qualität und größere Dateien. 24 ist der ausgewogene Standard.", "Une valeur plus basse donne une meilleure qualité et des fichiers plus volumineux. 24 est le réglage équilibré par défaut.", "Los valores más bajos dan más calidad y archivos más grandes. 24 es el valor equilibrado predeterminado.", "値が低いほど高品質でファイルサイズが大きくなります。24 がバランスの取れた既定値です。", "数值越低质量越高，文件越大。24 是均衡默认值。", "Чем ниже значение, тем выше качество и больше файл. 24 — сбалансированное значение по умолчанию."}},
+        {"videoBitrate",{"Bitrate", "Bitrate", "Bitrate", "Débit", "Bitrate", "ビットレート", "比特率", "Битрейт"}},
+        {"audioMode",{"Ses", "Audio", "Audio", "Audio", "Audio", "音声", "音频", "Аудио"}},
+        {"audioNone",{"Ses yok", "No audio", "Kein Audio", "Sans audio", "Sin audio", "音声なし", "无音频", "Без аудио"}},
+        {"audioDesktop",{"Masaüstü sesi", "Desktop audio", "Desktop-Audio", "Audio du bureau", "Audio del escritorio", "デスクトップ音声", "桌面音频", "Звук рабочего стола"}},
+        {"audioMicrophone",{"Mikrofon", "Microphone", "Mikrofon", "Microphone", "Micrófono", "マイク", "麦克风", "Микрофон"}},
+        {"audioDesktopMic",{"Masaüstü + mikrofon", "Desktop + microphone", "Desktop + Mikrofon", "Bureau + microphone", "Escritorio + micrófono", "デスクトップ + マイク", "桌面 + 麦克风", "Рабочий стол + микрофон"}},
+        {"audioSource",{"Kaynak", "Source", "Quelle", "Source", "Fuente", "ソース", "来源", "Источник"}},
+        {"audioMicrophoneDevice",{"Mikrofon", "Microphone", "Mikrofon", "Microphone", "Micrófono", "マイク", "麦克风", "Микрофон"}},
+        {"audioNoDevice",{"Uygun cihaz yok", "No compatible device", "Kein kompatibles Gerät", "Aucun appareil compatible", "No hay dispositivo compatible", "対応デバイスなし", "没有兼容设备", "Нет совместимого устройства"}},
+        {"audioSystemLoopback",{"Sistem sesi", "System audio", "Systemaudio", "Audio système", "Audio del sistema", "システム音声", "系统音频", "Системный звук"}},
 
         // ─── Kaydırmalı Yakalama ───
         {"scrollSelectArea",{"Kaydırmalı alan seçin", "Select scrolling area", "Scrollbereich wählen", "Sélectionnez la zone défilante", "Seleccione el área de desplazamiento", "スクロール範囲を選択", "选择滚动区域", "Выберите область прокрутки"}},

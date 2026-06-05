@@ -18,6 +18,14 @@ Tesseract OCR is used for optical character recognition when the OCR feature is 
 
 EShot may distribute selected Tesseract traineddata files for OCR language support.
 
+## FFmpeg
+
+- Project: FFmpeg
+- Website: https://ffmpeg.org/
+- License: FFmpeg is available under LGPL/GPL license terms depending on the distributed build.
+
+EShot uses FFmpeg for MP4 screen recording when the optional video recording component is installed. The bundled FFmpeg binary should be distributed with its corresponding license information from the selected FFmpeg build.
+
 ## Qt
 
 - Project: Qt
@@ -35,4 +43,3 @@ Inno Setup is used to build the Windows installer.
 ## Notes
 
 This file is provided for attribution and license visibility. EShot's own source code is licensed under the MIT License; see LICENSE.
-

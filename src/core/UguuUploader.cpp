@@ -77,7 +77,7 @@ void UguuUploader::upload()
 
     QNetworkRequest req(QUrl(QStringLiteral("https://uguu.se/upload?output=json")));
     req.setRawHeader("Accept", "application/json");
-    req.setRawHeader("User-Agent", "EShot/2.4");
+    req.setRawHeader("User-Agent", "EShot/3.0");
     req.setTransferTimeout(60000);
 
     m_reply = nam()->post(req, m_multipart);

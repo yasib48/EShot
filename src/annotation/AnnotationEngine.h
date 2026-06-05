@@ -107,6 +107,7 @@ private:
     void drawAnnotation(QPainter *painter, const Annotation &ann, const QPoint &offset);
     void drawBlurEffect(QPainter *painter, const QRect &rect, const QPoint &offset);
     QRect annotationBounds(const Annotation &ann, int padding = 10) const;
+    bool annotationContainsPoint(const Annotation &ann, const QPoint &pos, int padding = 8) const;
     void pushHistory(HistoryAction::Type type, const Annotation &annotation, int index);
     void recalculateCounterValue();
 

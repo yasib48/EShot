@@ -34,6 +34,7 @@
 #include <QDialog>
 #include <QLocalServer>
 #include <QLocalSocket>
+#include <QProcess>
 
 #include "core/HotkeyManager.h"
 #include "core/TranslationManager.h"
@@ -41,6 +42,7 @@
 #include "capture/PinnedWindow.h"
 #include "capture/PinManager.h"
 #include "recording/ScreenRecorder.h"
+#include "recording/VideoRecorder.h"
 #include "recording/RecordingIndicator.h"
 #include "ui/SettingsDialog.h"
 #include "ui/AboutDialog.h"
@@ -61,6 +63,7 @@ public:
         setupTrayIcon();
         setupHotkey();
         checkForUpdates();
+        QTimer::singleShot(700, this, [this]() { ensureOverlay(); });
     }
 
     ~EShotApp()
@@ -84,6 +87,20 @@ public slots:
         m_overlay->startCapture();
     }
 
+    void showSuccessNotification(const QString &message, const QString &path, int timeoutMs)
+    {
+        if (!m_trayIcon || !m_showNotifications)
+            return;
+        if (!path.isEmpty())
+            m_lastNotificationPath = path;
+        if (!m_trayIcon->isVisible())
+            m_trayIcon->show();
+        m_trayIcon->showMessage(TranslationManager::notifCaptureTitle(),
+                                message,
+                                QSystemTrayIcon::Information,
+                                timeoutMs);
+    }
+
     void onCaptureCompleted(const QPixmap &pixmap)
     {
         if (m_skipNextCaptureNotification) {
@@ -91,11 +108,10 @@ public slots:
             return;
         }
         m_lastNotificationPath.clear();
-        if (m_trayIcon && m_showNotifications) {
-            m_trayIcon->showMessage(
-                TranslationManager::notifCaptureTitle(),
+        if (m_trayIcon && m_showNotifications && m_notifyCopy) {
+            showSuccessNotification(
                 TranslationManager::notifCaptureMsg(pixmap.width(), pixmap.height()),
-                QSystemTrayIcon::Information, 2000);
+                QString(), 2000);
         }
     }
 
@@ -103,12 +119,15 @@ public slots:
     {
         m_lastNotificationPath = path;
         m_skipNextCaptureNotification = true;
-        if (m_trayIcon && m_showNotifications) {
-            QFileInfo fi(path);
-            m_trayIcon->showMessage(
-                TranslationManager::notifCaptureTitle(),
-                QStringLiteral("%1\n%2").arg(TranslationManager::captureSaved(), QDir::toNativeSeparators(fi.absoluteFilePath())),
-                QSystemTrayIcon::Information, 4000);
+        if (m_trayIcon && m_showNotifications && m_notifySave) {
+            QTimer::singleShot(250, this, [this, path]() {
+                if (!m_trayIcon || !m_showNotifications || !m_notifySave)
+                    return;
+                QFileInfo fi(path);
+                showSuccessNotification(
+                    QStringLiteral("%1\n%2").arg(TranslationManager::captureSaved(), QDir::toNativeSeparators(fi.absoluteFilePath())),
+                    fi.absoluteFilePath(), 4000);
+            });
         }
     }
 
@@ -133,10 +152,12 @@ public slots:
     {
         if (!m_lastNotificationPath.isEmpty()) {
             QFileInfo fi(m_lastNotificationPath);
-            if (fi.exists()) {
-                QDesktopServices::openUrl(QUrl::fromLocalFile(fi.absolutePath()));
-            } else if (fi.absoluteDir().exists()) {
-                QDesktopServices::openUrl(QUrl::fromLocalFile(fi.absolutePath()));
+            QString dir = fi.isDir() ? fi.absoluteFilePath() : fi.absolutePath();
+            if (dir.isEmpty() || !QDir(dir).exists())
+                dir = fi.absoluteDir().absolutePath();
+            if (!dir.isEmpty() && QDir(dir).exists()) {
+                if (!QDesktopServices::openUrl(QUrl::fromLocalFile(dir)))
+                    QProcess::startDetached(QStringLiteral("explorer.exe"), {QDir::toNativeSeparators(dir)});
             }
         }
     }
@@ -212,6 +233,46 @@ public slots:
         m_overlay->startCaptureForRecording();
     }
 
+    void onRecordVideoSelected(QRect rect)
+    {
+        if (rect.isEmpty()) return;
+        if (m_videoRecorder && m_videoRecorder->isRecording()) {
+            m_videoRecorder->stop();
+            return;
+        }
+        if (m_videoRecorder) { m_videoRecorder->deleteLater(); m_videoRecorder = nullptr; }
+        if (m_recordingIndicator) { m_recordingIndicator->stop(); m_recordingIndicator->deleteLater(); m_recordingIndicator = nullptr; }
+
+        m_videoRecorder = new VideoRecorder(this);
+        connect(m_videoRecorder, &VideoRecorder::recordingStarted, this, &EShotApp::onVideoRecordingStarted);
+        connect(m_videoRecorder, &VideoRecorder::recordingStopped, this, &EShotApp::onVideoRecordingStopped);
+        connect(m_videoRecorder, &VideoRecorder::recordingFailed, this, &EShotApp::onVideoRecordingFailed);
+        connect(m_videoRecorder, &VideoRecorder::remainingTimeChanged, this, [this](int sec) {
+            if (m_recordingIndicator) m_recordingIndicator->setRemainingSeconds(sec);
+        });
+        connect(m_videoRecorder, &VideoRecorder::elapsedTimeChanged, this, [this](int sec) {
+            if (m_recordingIndicator) m_recordingIndicator->setElapsedSeconds(sec);
+        });
+        connect(m_videoRecorder, &VideoRecorder::pausedChanged, this, [this](bool paused) {
+            if (m_recordingIndicator) m_recordingIndicator->setPaused(paused);
+        });
+
+        QSettings s("EShot", "EShot");
+        const int fps = s.value("videoRecordingFps", 30).toInt();
+        const int maxSec = s.value("videoRecordingMaxSeconds", 0).toInt();
+        const int crf = s.value("videoRecordingCrf", 24).toInt();
+        const bool desktopAudio = s.value("videoDesktopAudioEnabled", false).toBool();
+        const int desktopVolume = s.value("videoDesktopAudioVolume", 80).toInt();
+        const QString desktopDevice = s.value("videoDesktopAudioDevice", "__wasapi__").toString();
+        const bool microphoneAudio = s.value("videoMicrophoneEnabled", false).toBool();
+        const int microphoneVolume = s.value("videoMicrophoneVolume", 80).toInt();
+        const QString microphoneDevice = s.value("videoMicrophoneDevice", "default").toString();
+        m_videoRecorder->start(rect, fps, maxSec, crf,
+                               desktopAudio, desktopVolume, desktopDevice,
+                               microphoneAudio, microphoneVolume,
+                               microphoneDevice);
+    }
+
     void onRecordGifSelected(QRect rect)
     {
         if (rect.isEmpty()) return;
@@ -250,12 +311,10 @@ public slots:
     void onRecordingStopped(QString outputPath)
     {
         if (m_recordingIndicator) { m_recordingIndicator->stop(); m_recordingIndicator = nullptr; }
-        if (m_trayIcon && m_showNotifications) {
-            m_lastNotificationPath = outputPath;
+        if (m_trayIcon && m_showNotifications && m_notifyGif) {
             QFileInfo fi(outputPath);
-            m_trayIcon->showMessage(TranslationManager::notifCaptureTitle(),
-                                    TranslationManager::recordingSaved() + QStringLiteral("\n") + QDir::toNativeSeparators(fi.absoluteFilePath()),
-                                    QSystemTrayIcon::Information, 5000);
+            showSuccessNotification(TranslationManager::recordingSaved() + QStringLiteral("\n") + QDir::toNativeSeparators(fi.absoluteFilePath()),
+                                    fi.absoluteFilePath(), 5000);
         }
         rebuildTrayMenu();
     }
@@ -270,11 +329,63 @@ public slots:
         rebuildTrayMenu();
     }
 
+    void onVideoRecordingStarted()
+    {
+        if (m_videoRecorder) {
+            m_recordingIndicator = new RecordingIndicator(m_videoRecorder->captureRect(), nullptr, 2, true);
+            connect(m_recordingIndicator, &RecordingIndicator::stopRequested, this, [this]() {
+                if (m_videoRecorder && m_videoRecorder->isRecording())
+                    m_videoRecorder->stop();
+            });
+            connect(m_recordingIndicator, &RecordingIndicator::pauseRequested, this, [this]() {
+                if (m_videoRecorder && m_videoRecorder->isRecording())
+                    m_videoRecorder->pause();
+            });
+            connect(m_recordingIndicator, &RecordingIndicator::resumeRequested, this, [this]() {
+                if (m_videoRecorder && m_videoRecorder->isRecording())
+                    m_videoRecorder->resume();
+            });
+            connect(m_recordingIndicator, &RecordingIndicator::cancelRequested, this, [this]() {
+                if (m_videoRecorder && m_videoRecorder->isRecording())
+                    m_videoRecorder->cancel();
+                if (m_recordingIndicator) { m_recordingIndicator->stop(); m_recordingIndicator = nullptr; }
+            });
+        }
+        rebuildTrayMenu();
+    }
+
+    void onVideoRecordingStopped(QString outputPath)
+    {
+        if (m_recordingIndicator) { m_recordingIndicator->stop(); m_recordingIndicator = nullptr; }
+        if (m_trayIcon && m_showNotifications && m_notifyVideo) {
+            QFileInfo fi(outputPath);
+            showSuccessNotification(TranslationManager::videoSaved() + QStringLiteral("\n") + QDir::toNativeSeparators(fi.absoluteFilePath()),
+                                    fi.absoluteFilePath(), 5000);
+        }
+        rebuildTrayMenu();
+    }
+
+    void onVideoRecordingFailed(QString reason)
+    {
+        if (m_recordingIndicator) { m_recordingIndicator->stop(); m_recordingIndicator = nullptr; }
+        m_lastNotificationPath.clear();
+        if (reason == QStringLiteral("ffmpeg.exe not found"))
+            reason = TranslationManager::videoFfmpegMissing();
+        if (m_trayIcon) m_trayIcon->showMessage(TranslationManager::notifCaptureTitle(),
+                                                TranslationManager::videoFailed() + QStringLiteral(": ") + reason,
+                                                QSystemTrayIcon::Warning, 5000);
+        rebuildTrayMenu();
+    }
+
 private:
     void loadSettings()
     {
         QSettings s("EShot", "EShot");
         m_showNotifications = s.value("showNotifications", true).toBool();
+        m_notifyCopy = s.value("notifyCopy", false).toBool();
+        m_notifySave = s.value("notifySave", true).toBool();
+        m_notifyGif = s.value("notifyGif", true).toBool();
+        m_notifyVideo = s.value("notifyVideo", true).toBool();
     }
 
     static QIcon trayIcon(const QString &path, const QSize &size = QSize(16, 16))
@@ -369,6 +480,7 @@ private:
         connect(m_overlay, &CaptureOverlay::captureCancelled, this, &EShotApp::onCaptureCancelled);
         connect(m_overlay, &CaptureOverlay::regionSelected, this, &EShotApp::onRegionSelected);
         connect(m_overlay, &CaptureOverlay::gifCaptureRequested, this, &EShotApp::onRecordGifSelected);
+        connect(m_overlay, &CaptureOverlay::videoCaptureRequested, this, &EShotApp::onRecordVideoSelected);
         connect(m_overlay, &CaptureOverlay::pinnedWindowCreated, this, [this](PinnedWindow *w) {
             m_pinnedWindows.append(QPointer<PinnedWindow>(w));
         });
@@ -381,6 +493,25 @@ private:
     {
         connect(&HotkeyManager::instance(), &HotkeyManager::captureRequested,
                 this, &EShotApp::onCaptureRequested);
+        connect(&HotkeyManager::instance(), &HotkeyManager::recordingPauseRequested, this, [this]() {
+            if (m_videoRecorder && m_videoRecorder->isRecording()) {
+                if (m_videoRecorder->isPaused()) m_videoRecorder->resume();
+                else m_videoRecorder->pause();
+            }
+        });
+        connect(&HotkeyManager::instance(), &HotkeyManager::recordingStopRequested, this, [this]() {
+            if (m_videoRecorder && m_videoRecorder->isRecording()) m_videoRecorder->stop();
+            else if (m_screenRecorder && m_screenRecorder->isRecording()) m_screenRecorder->stop();
+        });
+        connect(&HotkeyManager::instance(), &HotkeyManager::recordingCancelRequested, this, [this]() {
+            if (m_videoRecorder && m_videoRecorder->isRecording()) {
+                m_videoRecorder->cancel();
+                if (m_recordingIndicator) { m_recordingIndicator->stop(); m_recordingIndicator = nullptr; }
+            } else if (m_screenRecorder && m_screenRecorder->isRecording()) {
+                m_screenRecorder->cancel();
+                if (m_recordingIndicator) { m_recordingIndicator->stop(); m_recordingIndicator = nullptr; }
+            }
+        });
     }
 
     bool closeBlockingDialogs()
@@ -503,6 +634,10 @@ private:
     QMenu *m_trayMenu = nullptr;
     CaptureOverlay *m_overlay = nullptr;
     bool m_showNotifications = true;
+    bool m_notifyCopy = false;
+    bool m_notifySave = true;
+    bool m_notifyGif = true;
+    bool m_notifyVideo = true;
     bool m_updateAvailable = false;
     QString m_latestVersion;
     QString m_latestReleaseUrl;
@@ -510,6 +645,7 @@ private:
     bool m_skipNextCaptureNotification = false;
     QList<QPointer<PinnedWindow>> m_pinnedWindows;
     ScreenRecorder *m_screenRecorder = nullptr;
+    VideoRecorder *m_videoRecorder = nullptr;
     RecordingIndicator *m_recordingIndicator = nullptr;
     int m_pendingMode = 0;
 };

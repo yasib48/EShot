@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(EShot VERSION 2.4.8 LANGUAGES CXX)
+project(EShot VERSION 3.0.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -34,6 +34,7 @@ set(SOURCES
     src/ui/UploadDialog.cpp
     src/recording/GifEncoder.cpp
     src/recording/ScreenRecorder.cpp
+    src/recording/VideoRecorder.cpp
     src/recording/RecordingIndicator.cpp
 )
 
@@ -55,6 +56,7 @@ set(HEADERS
     src/ui/UploadDialog.h
     src/recording/GifEncoder.h
     src/recording/ScreenRecorder.h
+    src/recording/VideoRecorder.h
     src/recording/RecordingIndicator.h
 )
 
@@ -111,6 +113,21 @@ if(MSVC)
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         COMMAND mt.exe -manifest ${CMAKE_CURRENT_SOURCE_DIR}/EShot.manifest -outputresource:$<TARGET_FILE:${PROJECT_NAME}>\;1
         COMMENT "Embedding manifest into executable"
+    )
+endif()
+
+# Bundle FFmpeg for MP4 screen recording when a local binary is provided.
+# Expected layout: third_party/ffmpeg/bin/ffmpeg.exe
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/third_party/ffmpeg/bin/ffmpeg.exe)
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CMAKE_CURRENT_SOURCE_DIR}/third_party/ffmpeg/bin
+            $<TARGET_FILE_DIR:${PROJECT_NAME}>/ffmpeg
+        COMMENT "Copying bundled FFmpeg to output directory"
+    )
+    install(DIRECTORY third_party/ffmpeg/bin/
+        DESTINATION bin/ffmpeg
+        FILES_MATCHING PATTERN "*"
     )
 endif()
 

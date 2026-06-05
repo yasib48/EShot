@@ -13,6 +13,14 @@
 class AnnotationToolbar;
 class AnnotationEngine;
 class PinnedWindow;
+class QComboBox;
+class QFontComboBox;
+class QSpinBox;
+class QSlider;
+class QPushButton;
+class QCheckBox;
+class QPropertyAnimation;
+class QLabel;
 
 
 class CaptureOverlay : public QWidget {
@@ -34,6 +42,7 @@ signals:
     void regionSelected(QRect rect);
     void regionCancelled();
     void gifCaptureRequested(QRect rect);
+    void videoCaptureRequested(QRect rect);
 
 protected:
     void paintEvent(QPaintEvent *event) override;
@@ -77,9 +86,48 @@ private:
     // Text editing — multi-line support
     QTextEdit *m_textEdit;
     QPoint m_textEditPosition;
+    QWidget *m_textEditPanel = nullptr;
+    QPushButton *m_textMoveHandle = nullptr;
+    QFontComboBox *m_textInlineFontCombo = nullptr;
+    QSpinBox *m_textInlineSizeSpin = nullptr;
+    bool m_textPanelDragging = false;
+    QPoint m_textPanelDragOffset;
     void commitText();
     void cancelTextEdit();
+    void beginTextEditAt(const QPoint &pos);
+    void moveTextEditorTo(const QPoint &pos);
+    void updateTextEditorStyle();
+    void updateTextEditPanelPosition();
     void updateUndoRedoState();
+    bool matchesOverlayShortcut(QKeyEvent *event, const QString &key, const QString &fallback) const;
+    void selectAnnotationTool(int toolId);
+
+    QPushButton *m_toolSettingsButton = nullptr;
+    QWidget *m_toolSettingsDrawer = nullptr;
+    QPropertyAnimation *m_toolSettingsAnimation = nullptr;
+    QPropertyAnimation *m_toolSettingsButtonAnimation = nullptr;
+    QSlider *m_quickPenWidthSlider = nullptr;
+    QSlider *m_quickBlurSlider = nullptr;
+    QLabel *m_quickPenWidthValueLabel = nullptr;
+    QLabel *m_quickBlurValueLabel = nullptr;
+    QSpinBox *m_quickGifFpsSpin = nullptr;
+    QSpinBox *m_quickGifSecondsSpin = nullptr;
+    QComboBox *m_quickGifLoopCombo = nullptr;
+    QSpinBox *m_quickVideoFpsSpin = nullptr;
+    QSpinBox *m_quickVideoSecondsSpin = nullptr;
+    QSpinBox *m_quickVideoCrfSpin = nullptr;
+    QCheckBox *m_quickDesktopAudioCheck = nullptr;
+    QSlider *m_quickDesktopVolumeSlider = nullptr;
+    QLabel *m_quickDesktopVolumeLabel = nullptr;
+    QComboBox *m_quickDesktopAudioDeviceCombo = nullptr;
+    QCheckBox *m_quickMicrophoneCheck = nullptr;
+    QSlider *m_quickMicrophoneVolumeSlider = nullptr;
+    QLabel *m_quickMicrophoneVolumeLabel = nullptr;
+    QComboBox *m_quickMicrophoneDeviceCombo = nullptr;
+    void setupToolSettingsDrawer();
+    void updateToolSettingsDrawerPosition();
+    void setToolSettingsDrawerVisible(bool visible);
+    bool isToolSettingsUiAt(const QPoint &pos) const;
 
     // Resize and move
     enum ResizeMode { ResNone, ResTopLeft, ResTopRight, ResBottomRight, ResBottomLeft, ResMove, ResNewSelection };
@@ -135,6 +183,7 @@ private slots:
     void onOcrRequested();
     void onUploadRequested();
     void onGifRequested();
+    void onVideoRequested();
 
     void performCapture();
 };

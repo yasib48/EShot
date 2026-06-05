@@ -18,6 +18,9 @@ public:
     void unregisterHotkey(int id);
     void unregisterAllHotkeys();
     bool reRegisterCaptureHotkey(UINT modifiers, UINT virtualKey);
+    bool reRegisterRecordingHotkeys(UINT pauseModifiers, UINT pauseVirtualKey,
+                                    UINT stopModifiers, UINT stopVirtualKey,
+                                    UINT cancelModifiers, UINT cancelVirtualKey);
     UINT captureModifiers() const { return m_captureModifiers; }
     UINT captureVirtualKey() const { return m_captureVirtualKey; }
     static bool isPlainPrintScreen(UINT modifiers, UINT virtualKey);
@@ -28,6 +31,9 @@ public:
 signals:
     void hotkeyTriggered(int id);
     void captureRequested();
+    void recordingPauseRequested();
+    void recordingStopRequested();
+    void recordingCancelRequested();
 
 private:
     explicit HotkeyManager(QObject *parent = nullptr);
@@ -38,9 +44,18 @@ private:
     QList<int> m_registeredHotkeys;
     UINT m_captureModifiers = 0;
     UINT m_captureVirtualKey = VK_SNAPSHOT;
+    UINT m_recordingPauseModifiers = MOD_CONTROL | MOD_ALT;
+    UINT m_recordingPauseVirtualKey = 'P';
+    UINT m_recordingStopModifiers = MOD_CONTROL | MOD_ALT;
+    UINT m_recordingStopVirtualKey = 'S';
+    UINT m_recordingCancelModifiers = MOD_CONTROL | MOD_ALT;
+    UINT m_recordingCancelVirtualKey = 'X';
 
 public:
     static constexpr int HOTKEY_CAPTURE = 1;
+    static constexpr int HOTKEY_RECORDING_PAUSE = 2;
+    static constexpr int HOTKEY_RECORDING_STOP = 3;
+    static constexpr int HOTKEY_RECORDING_CANCEL = 4;
 };
 
 #endif

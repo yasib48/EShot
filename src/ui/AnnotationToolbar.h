@@ -43,6 +43,7 @@ signals:
     void ocrRequested();
     void uploadRequested();
     void gifRequested();
+    void videoRequested();
 
 private slots:
     void onToolButtonClicked();
@@ -103,6 +104,7 @@ private:
     QPushButton *m_ocrButton;
     QPushButton *m_uploadButton;
     QPushButton *m_gifButton;
+    QPushButton *m_videoButton;
 };
 
 #endif

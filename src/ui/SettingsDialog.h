@@ -13,6 +13,7 @@
 #include <QListWidget>
 #include <QKeySequenceEdit>
 #include <QPushButton>
+#include <QMap>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -64,6 +65,11 @@ private:
     QCheckBox *m_autoStartCheck = nullptr;
     bool m_loadedAutoStart = false;
     QCheckBox *m_showNotificationsCheck = nullptr;
+    QWidget *m_notificationOptionsWidget = nullptr;
+    QCheckBox *m_notifyCopyCheck = nullptr;
+    QCheckBox *m_notifySaveCheck = nullptr;
+    QCheckBox *m_notifyGifCheck = nullptr;
+    QCheckBox *m_notifyVideoCheck = nullptr;
     QCheckBox *m_playSoundCheck = nullptr;
     QCheckBox *m_copyPathAfterSaveCheck = nullptr;
 
@@ -90,6 +96,10 @@ private:
 
     // Shortcut
     QKeySequenceEdit *m_hotkeyEdit = nullptr;
+    QKeySequenceEdit *m_recordingPauseHotkeyEdit = nullptr;
+    QKeySequenceEdit *m_recordingStopHotkeyEdit = nullptr;
+    QKeySequenceEdit *m_recordingCancelHotkeyEdit = nullptr;
+    QMap<QString, QKeySequenceEdit*> m_overlayHotkeyEdits;
     QLabel *m_hotkeyStatusLabel = nullptr;
     QLabel *m_printScreenConflictLabel = nullptr;
     QPushButton *m_printScreenFixButton = nullptr;
@@ -98,6 +108,16 @@ private:
     QSpinBox *m_recordingFpsSpin = nullptr;
     QSpinBox *m_recordingMaxSecSpin = nullptr;
     QComboBox *m_recordingLoopCombo = nullptr;
+    QSpinBox *m_videoFpsSpin = nullptr;
+    QSpinBox *m_videoMaxSecSpin = nullptr;
+    QSpinBox *m_videoCrfSpin = nullptr;
+    QCheckBox *m_videoDesktopAudioCheck = nullptr;
+    QSlider *m_videoDesktopVolumeSlider = nullptr;
+    QSpinBox *m_videoDesktopVolumeSpin = nullptr;
+    QCheckBox *m_videoMicrophoneCheck = nullptr;
+    QSlider *m_videoMicrophoneVolumeSlider = nullptr;
+    QSpinBox *m_videoMicrophoneVolumeSpin = nullptr;
+    QComboBox *m_videoMicrophoneDeviceCombo = nullptr;
 
     // Language
     QComboBox *m_langCombo = nullptr;

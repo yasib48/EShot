@@ -77,7 +77,7 @@ void CatboxUploader::upload()
     m_multipart->append(filePart);
 
     QNetworkRequest req(QUrl(QStringLiteral("https://catbox.moe/user/api.php")));
-    req.setRawHeader("User-Agent", "EShot/2.4");
+    req.setRawHeader("User-Agent", "EShot/3.0");
     req.setTransferTimeout(60000);
 
     m_reply = nam()->post(req, m_multipart);

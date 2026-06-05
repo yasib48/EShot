@@ -1,0 +1,147 @@
+name: Build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+env:
+  APP_VERSION: '3.0.0'
+  QT_VERSION: '6.8.2'
+  # x64 Tesseract comes prebuilt from UB-Mannheim. ARM64 has no prebuilt
+  # upstream binary, so it's compiled natively from source via vcpkg below.
+  TESSERACT_URL: 'https://digi.bib.uni-mannheim.de/tesseract/tesseract-ocr-w64-setup-5.3.4.20240503.exe'
+
+jobs:
+  build:
+    name: Build ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # x64 build on the standard Windows runner
+          - arch: x64
+            runner: windows-latest
+            cmake_arch: x64
+            qt_arch: win64_msvc2022_64
+            ffmpeg_url: 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip'
+
+          # ARM64 build on the native Windows 11 Arm runner (FFmpeg is native Arm)
+          - arch: arm64
+            runner: windows-11-arm
+            cmake_arch: ARM64
+            qt_arch: win64_msvc2022_arm64
+            ffmpeg_url: 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-winarm64-gpl.zip'
+
+    env:
+      BUILD_DIR: ${{ github.workspace }}/build
+      DIST_DIR: ${{ github.workspace }}/dist
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Qt 6 (qtbase covers Core/Gui/Widgets/Network — no extra modules needed).
+      # The arm64 package is the cross-compiled set; its host tools (moc, rcc,
+      # windeployqt) are x64 PE and run on the Arm runner via emulation.
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: windows
+          target: desktop
+          arch: ${{ matrix.qt_arch }}
+          cache: true
+
+      # Stage the bundled third-party binaries into the locations CMake's
+      # EXISTS() checks look for, so they get copied + installed automatically.
+      # tessdata/*.traineddata is already committed under third_party/tesseract.
+      - name: Stage FFmpeg (${{ matrix.arch }}, native)
+        run: |
+          curl -L -o ffmpeg.zip "${{ matrix.ffmpeg_url }}"
+          Expand-Archive ffmpeg.zip -DestinationPath ffmpeg_extract -Force
+          New-Item -ItemType Directory -Force third_party/ffmpeg/bin | Out-Null
+          Copy-Item (Get-ChildItem -Recurse ffmpeg_extract/*/bin/*.exe) third_party/ffmpeg/bin/ -Force
+
+      # x64: prebuilt UB-Mannheim installer (NSIS). /S = silent, /D = dir (last, unquoted).
+      - name: Stage Tesseract (x64, UB-Mannheim)
+        if: matrix.arch == 'x64'
+        run: |
+          curl -L -o tesseract-setup.exe "$env:TESSERACT_URL"
+          Start-Process -FilePath .\tesseract-setup.exe -ArgumentList '/S','/D=C:\TesseractOCR' -Wait
+          New-Item -ItemType Directory -Force third_party/tesseract | Out-Null
+          Copy-Item C:\TesseractOCR\tesseract.exe third_party/tesseract/ -Force
+          Copy-Item C:\TesseractOCR\*.dll        third_party/tesseract/ -Force
+
+      # arm64: no prebuilt upstream binary exists, so build natively with vcpkg.
+      # Cache the binary archives so we don't recompile leptonica/tesseract every run.
+      - name: Cache vcpkg archives (arm64)
+        if: matrix.arch == 'arm64'
+        uses: actions/cache@v4
+        with:
+          path: ~/AppData/Local/vcpkg/archives
+          key: vcpkg-tesseract-arm64-windows-v1
+          restore-keys: vcpkg-tesseract-arm64-windows-
+
+      - name: Stage Tesseract (arm64, vcpkg native)
+        if: matrix.arch == 'arm64'
+        run: |
+          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install tesseract:arm64-windows
+          $inst = "$env:VCPKG_INSTALLATION_ROOT\installed\arm64-windows"
+          New-Item -ItemType Directory -Force third_party/tesseract | Out-Null
+          # tesseract.exe lives in tools/; its runtime DLLs (leptonica, curl, ...) are in bin/
+          Copy-Item "$inst\tools\tesseract\tesseract.exe" third_party/tesseract/ -Force
+          Copy-Item "$inst\bin\*.dll"                      third_party/tesseract/ -Force
+
+      # Visual Studio 2022 generator with -A picks the target architecture, so
+      # no separate MSVC/Ninja setup is needed (VS2022 is preinstalled on both
+      # the windows-latest and windows-11-arm images).
+      - name: Configure
+        run: >
+          cmake -S . -B "${{ env.BUILD_DIR }}"
+          -G "Visual Studio 17 2022"
+          -A ${{ matrix.cmake_arch }}
+          -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build "${{ env.BUILD_DIR }}" --config Release --parallel
+
+      - name: Install
+        run: >
+          cmake --install "${{ env.BUILD_DIR }}"
+          --config Release
+          --prefix "${{ env.DIST_DIR }}"
+
+      # Bundle the Qt runtime + the MSVC redistributable DLLs next to the exe so
+      # the artifact (and installer) is self-contained.
+      - name: Deploy Qt runtime
+        run: >
+          windeployqt --release --no-translations
+          "${{ env.DIST_DIR }}/bin/EShot.exe"
+
+      - name: Upload portable build
+        uses: actions/upload-artifact@v4
+        with:
+          name: EShot-${{ matrix.arch }}
+          path: ${{ env.DIST_DIR }}/bin
+          if-no-files-found: error
+
+      # Build the Inno Setup installer from the assembled dist/bin tree.
+      # ISCC is x86; on the Arm runner it runs under emulation and still
+      # packages the native Arm payload. /F overrides the output basename so
+      # the two arch installers don't collide.
+      - name: Build installer
+        run: |
+          choco install innosetup -y --no-progress
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" `
+            "/DReleaseDir=${{ env.DIST_DIR }}\bin" `
+            "/FEShot_Setup_v${{ env.APP_VERSION }}_${{ matrix.arch }}" `
+            EShot_Setup.iss
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: EShot-Setup-${{ matrix.arch }}
+          path: installer_output/*.exe
+          if-no-files-found: error

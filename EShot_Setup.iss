@@ -152,7 +152,7 @@ Source: "{#ReleaseDir}\ffmpeg\*";             DestDir: "{app}\ffmpeg";          
 
 ; Tesseract OCR engine (only when ocrengine task is selected)
 Source: "{#ReleaseDir}\tesseract\tesseract.exe";       DestDir: "{app}\tesseract";       Flags: ignoreversion; Tasks: ocrengine; Check: ShouldInstallOcrEngine
-Source: "{#ReleaseDir}\tesseract\winpath.exe";         DestDir: "{app}\tesseract";       Flags: ignoreversion; Tasks: ocrengine; Check: ShouldInstallOcrEngine
+Source: "{#ReleaseDir}\tesseract\winpath.exe";         DestDir: "{app}\tesseract";       Flags: ignoreversion skipifsourcedoesntexist; Tasks: ocrengine; Check: ShouldInstallOcrEngine
 Source: "{#ReleaseDir}\tesseract\*.dll";               DestDir: "{app}\tesseract";       Flags: ignoreversion; Tasks: ocrengine; Check: ShouldInstallOcrEngine
 Source: "{#ReleaseDir}\tesseract\tessdata\eng.traineddata"; DestDir: "{app}\tesseract\tessdata"; Flags: ignoreversion; Tasks: ocrengine\lang_eng; Check: ShouldInstallOcrLangEng
 Source: "{#ReleaseDir}\tesseract\tessdata\tur.traineddata"; DestDir: "{app}\tesseract\tessdata"; Flags: ignoreversion; Tasks: ocrengine\lang_tur; Check: ShouldInstallOcrLangTur

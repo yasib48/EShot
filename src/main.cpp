@@ -980,18 +980,27 @@ int main(int argc, char *argv[])
     // --silent (used by Windows autostart): skip the first-run wizard so the
     // app starts cleanly in the tray without any UI prompting.
     const bool silent = parser.isSet(silentOption);
-
-        // First-run wizard
+    // First-run wizard
     if (!silent && FirstRunWizard::shouldShow()) {
         FirstRunWizard wizard;
-        wizard.show();
-        QApplication::processEvents();
         if (QScreen *screen = QGuiApplication::screenAt(QCursor::pos())) {
             if (!screen) screen = QGuiApplication::primaryScreen();
             QRect avail = screen->availableGeometry();
             int nx = avail.center().x() - wizard.width() / 2;
             int ny = avail.center().y() - wizard.height() / 2;
             ny = qMax(avail.top() + 40, ny);
+            // 1. Fix ARM64 initial placement (CW_USEDEFAULT bug)
+            wizard.setGeometry(nx, ny, wizard.width(), wizard.height());
+        }
+        wizard.show();
+        QApplication::processEvents(); // Let DWM construct the frame
+        if (QScreen *screen = QGuiApplication::screenAt(QCursor::pos())) {
+            if (!screen) screen = QGuiApplication::primaryScreen();
+            QRect avail = screen->availableGeometry();
+            int nx = avail.center().x() - wizard.width() / 2;
+            int ny = avail.center().y() - wizard.height() / 2;
+            ny = qMax(avail.top() + 40, ny);
+            // 2. Fix ARM64 drag jump by forcing a coordinate resync AFTER the frame exists
             wizard.move(nx, ny);
         }
         if (wizard.exec() == QDialog::Accepted) {
@@ -999,7 +1008,7 @@ int main(int argc, char *argv[])
         }
     }
 
-        // Command line processing
+    // Command line processing
     QString cliSavePath;
     if (parser.isSet(saveOption)) {
         cliSavePath = parser.value(saveOption);

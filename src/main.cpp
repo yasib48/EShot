@@ -173,14 +173,19 @@ public slots:
     {
         SettingsDialog dlg;
         dlg.show();
-        QApplication::processEvents(); // Let ARM64 DWM finalize frame geometry
+        QApplication::processEvents(); // Let ARM64 DWM finalize frame geometry and draw the title bar
         if (QScreen *screen = QGuiApplication::screenAt(QCursor::pos())) {
             if (!screen) screen = QGuiApplication::primaryScreen();
             QRect avail = screen->availableGeometry();
+            
+            // Programmatically simulate a user resize to force layout compression and fix Sandbox double-render
+            dlg.resize(dlg.minimumSizeHint());
+            QApplication::processEvents();
+            
             int nx = avail.center().x() - dlg.width() / 2;
             int ny = avail.center().y() - dlg.height() / 2;
             ny = qMax(avail.top() + 40, ny); // GUARANTEE title bar is grabbable
-            dlg.move(nx, ny);
+            dlg.move(nx, ny); // Resync ARM64 drag margins
         }
         if (dlg.exec() == QDialog::Accepted) {
             loadSettings();
@@ -225,6 +230,10 @@ public slots:
         if (QScreen *screen = QGuiApplication::screenAt(QCursor::pos())) {
             if (!screen) screen = QGuiApplication::primaryScreen();
             QRect avail = screen->availableGeometry();
+            
+            dlg.resize(dlg.minimumSizeHint());
+            QApplication::processEvents();
+            
             int nx = avail.center().x() - dlg.width() / 2;
             int ny = avail.center().y() - dlg.height() / 2;
             ny = qMax(avail.top() + 40, ny);
@@ -982,30 +991,25 @@ int main(int argc, char *argv[])
     const bool silent = parser.isSet(silentOption);
     // First-run wizard
     if (!silent && FirstRunWizard::shouldShow()) {
-        FirstRunWizard wizard;
-        if (QScreen *screen = QGuiApplication::screenAt(QCursor::pos())) {
-            if (!screen) screen = QGuiApplication::primaryScreen();
-            QRect avail = screen->availableGeometry();
-            int nx = avail.center().x() - wizard.width() / 2;
-            int ny = avail.center().y() - wizard.height() / 2;
-            ny = qMax(avail.top() + 40, ny);
-            // 1. Fix ARM64 initial placement (CW_USEDEFAULT bug)
-            wizard.setGeometry(nx, ny, wizard.width(), wizard.height());
-        }
-        wizard.show();
-        QApplication::processEvents(); // Let DWM construct the frame
-        if (QScreen *screen = QGuiApplication::screenAt(QCursor::pos())) {
-            if (!screen) screen = QGuiApplication::primaryScreen();
-            QRect avail = screen->availableGeometry();
-            int nx = avail.center().x() - wizard.width() / 2;
-            int ny = avail.center().y() - wizard.height() / 2;
-            ny = qMax(avail.top() + 40, ny);
-            // 2. Fix ARM64 drag jump by forcing a coordinate resync AFTER the frame exists
-            wizard.move(nx, ny);
-        }
-        if (wizard.exec() == QDialog::Accepted) {
-            // Wizard completed
-        }
+        QTimer::singleShot(100, &app, []() {
+            auto *wizard = new FirstRunWizard();
+            wizard->setAttribute(Qt::WA_DeleteOnClose);
+            wizard->show();
+            QApplication::processEvents();
+            if (QScreen *screen = QGuiApplication::screenAt(QCursor::pos())) {
+                if (!screen) screen = QGuiApplication::primaryScreen();
+                QRect avail = screen->availableGeometry();
+                
+                wizard->resize(wizard->minimumSizeHint());
+                QApplication::processEvents();
+                
+                int nx = avail.center().x() - wizard->width() / 2;
+                int ny = avail.center().y() - wizard->height() / 2;
+                ny = qMax(avail.top() + 40, ny);
+                wizard->move(nx, ny);
+            }
+            wizard->exec();
+        });
     }
 
     // Command line processing

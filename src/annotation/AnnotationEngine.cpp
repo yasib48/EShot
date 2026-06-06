@@ -65,7 +65,7 @@ void AnnotationEngine::beginDraw(const QPoint &pos)
     m_currentAnnotation.points.append(pos);
 
     if (m_currentTool == Highlighter)
-        m_currentAnnotation.color = QColor(255, 255, 0, 100);
+        m_currentAnnotation.color = QColor(255, 193, 7, 185);
 }
 
 void AnnotationEngine::continueDraw(const QPoint &pos)
@@ -219,14 +219,19 @@ void AnnotationEngine::drawAnnotation(QPainter *painter, const Annotation &ann, 
         break;
     }
     case Highlighter: {
-        QPen pen(ann.color, ann.penWidth * 5, Qt::SolidLine, Qt::FlatCap, Qt::BevelJoin);
-        painter->setPen(pen);
-        painter->setOpacity(0.4);
+        QPainterPath path;
         if (ann.points.size() > 1) {
-            QPainterPath path;
             path.moveTo(ann.points.first() + offset);
             for (int i = 1; i < ann.points.size(); ++i)
                 path.lineTo(ann.points[i] + offset);
+            QPen contrastPen(QColor(0, 0, 0, 55), ann.penWidth * 5 + 2, Qt::SolidLine, Qt::FlatCap, Qt::BevelJoin);
+            painter->setPen(contrastPen);
+            painter->setOpacity(0.45);
+            painter->drawPath(path);
+
+            QPen pen(ann.color, ann.penWidth * 5, Qt::SolidLine, Qt::FlatCap, Qt::BevelJoin);
+            painter->setPen(pen);
+            painter->setOpacity(0.72);
             painter->drawPath(path);
         }
         break;

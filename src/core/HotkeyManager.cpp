@@ -68,7 +68,10 @@ bool HotkeyManager::isWindowsPrintScreenSnippingEnabled()
 #ifdef Q_OS_WIN
     QSettings reg(QStringLiteral("HKEY_CURRENT_USER\\Control Panel\\Keyboard"),
                   QSettings::NativeFormat);
-    return reg.value(QStringLiteral("PrintScreenKeyForSnippingEnabled"), 0).toInt() != 0;
+    // Current Windows 11 installations may omit this value while still using
+    // Print Screen for Snipping Tool. Treat the missing value as the Windows
+    // default (enabled), otherwise a clean installation hides EShot's fix UI.
+    return reg.value(QStringLiteral("PrintScreenKeyForSnippingEnabled"), 1).toInt() != 0;
 #else
     return false;
 #endif
@@ -81,7 +84,20 @@ bool HotkeyManager::setWindowsPrintScreenSnippingEnabled(bool enabled)
                   QSettings::NativeFormat);
     reg.setValue(QStringLiteral("PrintScreenKeyForSnippingEnabled"), enabled ? 1 : 0);
     reg.sync();
-    return reg.status() == QSettings::NoError;
+    if (reg.status() != QSettings::NoError
+        || reg.value(QStringLiteral("PrintScreenKeyForSnippingEnabled"), -1).toInt() != (enabled ? 1 : 0)) {
+        return false;
+    }
+
+    DWORD_PTR result = 0;
+    SendMessageTimeoutW(HWND_BROADCAST,
+                        WM_SETTINGCHANGE,
+                        0,
+                        reinterpret_cast<LPARAM>(L"Control Panel\\Keyboard"),
+                        SMTO_ABORTIFHUNG,
+                        1000,
+                        &result);
+    return true;
 #else
     Q_UNUSED(enabled);
     return false;

@@ -466,7 +466,7 @@ private:
     {
         m_trayIcon = new QSystemTrayIcon(this);
 
-        QIcon trayIcon(":/icons/pen.svg");
+        QIcon trayIcon(":/icons/pen_tray.svg");
         if (trayIcon.isNull()) {
             QPixmap pix(32, 32); pix.fill(Qt::blue);
             trayIcon = QIcon(pix);
@@ -626,21 +626,7 @@ private:
     void setTrayIconUpdate()
     {
         if (!m_trayIcon) return;
-        // Build yellow-pen icon
-        QPixmap base(":/icons/pen.svg");
-        if (!base.isNull()) {
-            QPixmap yellow(base.size());
-            yellow.fill(Qt::transparent);
-            QPainter p(&yellow);
-            p.setCompositionMode(QPainter::CompositionMode_SourceOver);
-            // Draw original icon
-            p.drawPixmap(0, 0, base);
-            // Apply yellow color mask
-            p.setCompositionMode(QPainter::CompositionMode_SourceIn);
-            p.fillRect(yellow.rect(), QColor(255, 200, 0));
-            p.end();
-            m_trayIcon->setIcon(QIcon(yellow));
-        }
+        m_trayIcon->setIcon(QIcon(":/icons/pen_tray_update.svg"));
         m_trayIcon->setToolTip(QString("%1 v%2 — %3").arg(
             TranslationManager::appTitle(),
             QCoreApplication::applicationVersion(),
@@ -650,7 +636,7 @@ private:
     void setTrayIconNormal()
     {
         if (!m_trayIcon) return;
-        QIcon trayIcon(":/icons/pen.svg");
+        QIcon trayIcon(":/icons/pen_tray.svg");
         if (trayIcon.isNull()) {
             QPixmap pix(32, 32); pix.fill(Qt::blue);
             trayIcon = QIcon(pix);

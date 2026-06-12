@@ -2,11 +2,18 @@ name: Build
 
 on:
   push:
+    branches:
+      - '**'
+    tags:
+      - 'v*'
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 env:
-  APP_VERSION: '3.0.4'
+  APP_VERSION: '3.0.5'
   QT_VERSION: '6.8.2'
 
 jobs:
@@ -40,6 +47,25 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Apply tag version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          $version = '${{ github.ref_name }}' -replace '^[vV]', ''
+          if ($version -notmatch '^\d+\.\d+\.\d+$') {
+            throw "Release tags must use vMAJOR.MINOR.PATCH, for example v3.0.5"
+          }
+
+          (Get-Content CMakeLists.txt -Raw) `
+            -replace 'project\(EShot VERSION \d+\.\d+\.\d+', "project(EShot VERSION $version" |
+            Set-Content CMakeLists.txt -NoNewline
+          (Get-Content EShot_Setup.iss -Raw) `
+            -replace '#define MyAppVersion\s+"\d+\.\d+\.\d+"', "#define MyAppVersion   `"$version`"" |
+            Set-Content EShot_Setup.iss -NoNewline
+
+          "APP_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host "Building release version $version"
 
       # Qt 6 (qtbase covers Core/Gui/Widgets/Network — no extra modules needed).
       # The arm64 arch is Qt's cross-compiled WoA package; --autodesktop pulls in
@@ -195,3 +221,34 @@ jobs:
           name: EShot-Setup-${{ matrix.arch }}
           path: installer_output/*.exe
           if-no-files-found: error
+
+  release:
+    name: Publish GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+
+      - name: Package portable builds
+        shell: bash
+        run: |
+          cd release-assets/EShot-x64
+          zip -r ../EShot-${{ github.ref_name }}-x64-portable.zip .
+          cd ../EShot-arm64
+          zip -r ../EShot-${{ github.ref_name }}-arm64-portable.zip .
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            release-assets/EShot-Setup-x64/*.exe
+            release-assets/EShot-Setup-arm64/*.exe
+            release-assets/EShot-${{ github.ref_name }}-x64-portable.zip
+            release-assets/EShot-${{ github.ref_name }}-arm64-portable.zip

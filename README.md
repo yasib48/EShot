@@ -2,7 +2,7 @@
 
 Fast, lightweight Windows screenshot tool with annotations, OCR, GIF recording, video recording, uploads, and pinned captures.
 
-[![Version](https://img.shields.io/badge/version-3.0.4-blue.svg)](https://github.com/Benoks/EShot/releases)
+[![Version](https://img.shields.io/badge/version-3.0.5-blue.svg)](https://github.com/Benoks/EShot/releases)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-lightgrey.svg)](#)
 [![Qt](https://img.shields.io/badge/Qt-6.x-green.svg)](https://www.qt.io/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
@@ -27,6 +27,12 @@ EShot is built for people who want a quick screenshot workflow without a heavy d
 - Customizable global and in-capture shortcuts
 - Start with Windows through Task Scheduler
 - GitHub release update check
+
+## What's New in v3.0.5
+
+- Added automatic x64 and ARM64 GitHub Release builds from version tags.
+- Fixed the installer language screen to start in English by default.
+- Improved desktop and tray icon contrast with white artwork and black outlines.
 
 ## What's New in v3.0.4
 

@@ -5,7 +5,7 @@
 ; ============================================================
 
 #define MyAppName      "EShot"
-#define MyAppVersion   "3.0.4"
+#define MyAppVersion   "3.0.5"
 #define MyAppPublisher "EShot"
 #define MyAppURL       "https://github.com/Benoks/EShot"
 #define MyAppExeName   "EShot.exe"
@@ -32,6 +32,7 @@ Compression=lzma2/ultra64
 SolidCompression=yes
 
 WizardStyle=modern
+LanguageDetectionMethod=none
 
 MinVersion=10.0
 ArchitecturesInstallIn64BitMode=x64compatible
@@ -42,11 +43,12 @@ UninstallDisplayIcon={app}\{#MyAppExeName}
 LicenseFile=LICENSE
 
 [Languages]
-Name: "turkish"; MessagesFile: "compiler:Languages\Turkish.isl"
 Name: "english"; MessagesFile: "compiler:Default.isl"
+Name: "turkish"; MessagesFile: "compiler:Languages\Turkish.isl"
 
 [CustomMessages]
-ExistingInstallWelcome=Mevcut kurulum bulundu. Kurulum EShot'i mevcut klasorde guncelleyecek; ayarlariniz korunacak.
+english.ExistingInstallWelcome=An existing installation was found. Setup will update EShot in its current folder and preserve your settings.
+turkish.ExistingInstallWelcome=Mevcut kurulum bulundu. Kurulum EShot'i mevcut klasorde guncelleyecek; ayarlariniz korunacak.
 OcrLangPortuguese=Portuguese OCR language
 OcrLangPolish=Polish OCR language
 OcrLangDutch=Dutch OCR language

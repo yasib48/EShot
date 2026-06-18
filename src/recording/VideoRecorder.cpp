@@ -1,6 +1,8 @@
 #include "VideoRecorder.h"
 
 #include <QCoreApplication>
+#include <QGuiApplication>
+#include <QScreen>
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
@@ -250,6 +252,19 @@ void VideoRecorder::start(const QRect &captureRect, int fps, int maxSeconds, int
 #endif
     }
 
+    // captureRect is logical (device-independent) so the on-screen recording
+    // indicator, a Qt widget, lines up with the selection. ffmpeg's gdigrab
+    // works in physical pixels, so scale the offset/size by the device pixel
+    // ratio. Map corners rather than scaling x/width separately to avoid
+    // rounding drift on the far edge.
+    qreal dpr = 1.0;
+    if (QScreen *screen = QGuiApplication::primaryScreen())
+        dpr = screen->devicePixelRatio();
+    const int physX = qRound(captureRect.x() * dpr);
+    const int physY = qRound(captureRect.y() * dpr);
+    const int physW = qRound((captureRect.x() + captureRect.width()) * dpr) - physX;
+    const int physH = qRound((captureRect.y() + captureRect.height()) * dpr) - physY;
+
     QStringList args;
     args << QStringLiteral("-y")
          << QStringLiteral("-hide_banner")
@@ -257,9 +272,9 @@ void VideoRecorder::start(const QRect &captureRect, int fps, int maxSeconds, int
          << QStringLiteral("-f") << QStringLiteral("gdigrab")
          << QStringLiteral("-draw_mouse") << QStringLiteral("1")
          << QStringLiteral("-framerate") << QString::number(m_fps)
-         << QStringLiteral("-offset_x") << QString::number(captureRect.x())
-         << QStringLiteral("-offset_y") << QString::number(captureRect.y())
-         << QStringLiteral("-video_size") << QStringLiteral("%1x%2").arg(captureRect.width()).arg(captureRect.height())
+         << QStringLiteral("-offset_x") << QString::number(physX)
+         << QStringLiteral("-offset_y") << QString::number(physY)
+         << QStringLiteral("-video_size") << QStringLiteral("%1x%2").arg(physW).arg(physH)
          << QStringLiteral("-i") << QStringLiteral("desktop");
 
     struct AudioInput {

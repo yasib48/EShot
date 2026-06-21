@@ -1537,9 +1537,22 @@ void CaptureOverlay::mousePressEvent(QMouseEvent *event)
             const bool selectionHandleHit = mode != ResNone && mode != ResMove && mode != ResNewSelection;
             
             bool isDrawingTool = (m_annotationEngine && m_annotationEngine->currentTool() != AnnotationEngine::None);
-            
+            if (isDrawingTool && selRect.contains(event->pos())) {
+                QPoint rel = event->pos() - selRect.topLeft();
+                if (m_annotationEngine->currentTool() == AnnotationEngine::Eraser) {
+                    if (m_annotationEngine->eraseAnnotationAt(rel)) {
+                        update();
+                        updateUndoRedoState();
+                    }
+                } else {
+                    m_annotationEngine->beginDraw(rel);
+                    update();
+                }
+                return;
+            }
+
             // Annotation click while no tool is selected → move mode
-            if (!selectionHandleHit && m_annotationEngine && selRect.contains(event->pos())) {
+            if (!isDrawingTool && !selectionHandleHit && m_annotationEngine && selRect.contains(event->pos())) {
                 QPoint rel = event->pos() - selRect.topLeft();
                 int idx = m_annotationEngine->findAnnotationAt(rel);
                 if (idx >= 0) {
@@ -1549,14 +1562,6 @@ void CaptureOverlay::mousePressEvent(QMouseEvent *event)
                     setCursor(Qt::SizeAllCursor);
                     update();
                     return;
-                }
-            }
-
-            if (isDrawingTool && (mode == ResMove || mode == ResNewSelection)) {
-                if (selRect.contains(event->pos())) {
-                     m_annotationEngine->beginDraw(event->pos() - selRect.topLeft());
-                     update();
-                     return;
                 }
             }
 
@@ -1588,7 +1593,8 @@ void CaptureOverlay::mousePressEvent(QMouseEvent *event)
         } else if (m_selectionComplete && m_selectionLocked) {
             // Selection locked — allow annotation drawing only
             QRect selRect = normalizedSelectionRect();
-            if (m_annotationEngine && selRect.contains(event->pos())) {
+            bool isDrawingTool = (m_annotationEngine && m_annotationEngine->currentTool() != AnnotationEngine::None);
+            if (!isDrawingTool && m_annotationEngine && selRect.contains(event->pos())) {
                 QPoint rel = event->pos() - selRect.topLeft();
                 int idx = m_annotationEngine->findAnnotationAt(rel);
                 if (idx >= 0) {
@@ -1600,10 +1606,17 @@ void CaptureOverlay::mousePressEvent(QMouseEvent *event)
                     return;
                 }
             }
-            bool isDrawingTool = (m_annotationEngine && m_annotationEngine->currentTool() != AnnotationEngine::None);
             if (isDrawingTool && selRect.contains(event->pos())) {
-                m_annotationEngine->beginDraw(event->pos() - selRect.topLeft());
-                update();
+                QPoint rel = event->pos() - selRect.topLeft();
+                if (m_annotationEngine->currentTool() == AnnotationEngine::Eraser) {
+                    if (m_annotationEngine->eraseAnnotationAt(rel)) {
+                        update();
+                        updateUndoRedoState();
+                    }
+                } else {
+                    m_annotationEngine->beginDraw(rel);
+                    update();
+                }
             }
         } else {
             m_isSelecting = true;
@@ -1660,28 +1673,12 @@ void CaptureOverlay::mouseMoveEvent(QMouseEvent *event)
         return;
     }
 
-    // Annotation move (with snap-to-edge)
+    // Annotation move
     if (m_isDraggingAnnotation && m_annotationEngine && m_annotationEngine->selectedIndex() >= 0) {
         QRect selRect = normalizedSelectionRect();
         QPoint rel = event->pos() - selRect.topLeft();
         QPoint delta = rel - m_dragAnnotationStart;
         if (!delta.isNull()) {
-            // Snap-to-edge: snap if within 8px of edge
-            int snapThreshold = 8;
-            QRect annBounds = m_annotationEngine->boundingRectOf(m_annotationEngine->selectedIndex());
-            if (!annBounds.isEmpty()) {
-                QPoint newPos = annBounds.topLeft() + delta;
-                // Snap to left edge
-                if (qAbs(newPos.x()) < snapThreshold) delta.setX(-annBounds.left());
-                // Snap to right edge
-                if (qAbs(newPos.x() + annBounds.width() - selRect.width()) < snapThreshold)
-                    delta.setX(selRect.width() - annBounds.width() - annBounds.left());
-                // Snap to top edge
-                if (qAbs(newPos.y()) < snapThreshold) delta.setY(-annBounds.top());
-                // Snap to bottom edge
-                if (qAbs(newPos.y() + annBounds.height() - selRect.height()) < snapThreshold)
-                    delta.setY(selRect.height() - annBounds.height() - annBounds.top());
-            }
             m_annotationEngine->moveAnnotation(m_annotationEngine->selectedIndex(), delta);
             m_dragAnnotationStart = rel;
             update();
@@ -2592,6 +2589,12 @@ void CaptureOverlay::updateCursor(const QPoint &pos)
 {
     if (!m_selectionComplete) {
         setCursor(Qt::CrossCursor);
+        return;
+    }
+
+    if (m_annotationEngine && m_annotationEngine->currentTool() != AnnotationEngine::None) {
+        QRect sel = normalizedSelectionRect();
+        setCursor(sel.contains(pos) ? Qt::CrossCursor : Qt::ArrowCursor);
         return;
     }
 
